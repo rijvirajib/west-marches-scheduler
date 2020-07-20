@@ -4,7 +4,7 @@ import { Client, MessageEmbed } from 'discord.js';
 import * as moment from 'moment';
 
 config();
-const client = new Client();
+const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
 
 const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
 const embedTitle = `React with the associated emojis to indicate your availability for those dates.`;
