@@ -1,0 +1,19 @@
+{
+  "name": "west-marches-scheduler",
+  "version": "1.0.0",
+  "description": "Helps schedule games for West Marches server",
+  "main": "index.js",
+  "scripts": {
+    "bot": "ts-node bot.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^14.0.23",
+    "discord.js": "^12.2.0",
+    "dotenv": "^8.2.0",
+    "ts-node": "^8.0.2",
+    "typescript": "^3.3.3333"
+  }
+}
