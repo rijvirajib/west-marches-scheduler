@@ -1,6 +1,6 @@
 // Run dotenv
 import { config } from 'dotenv';
-import { Client, MessageEmbed } from 'discord.js';
+import { Client, MessageEmbed, Message } from 'discord.js';
 import * as moment from 'moment';
 
 config();
@@ -30,7 +30,7 @@ client.on('message', (msg) => {
     msg.channel.send(schedulingEmbed);
   }
 
-  if (msg.author.id === client.user.id && msg.embeds && msg.embeds[0].title === embedTitle) {
+  if (msg.author.id === client.user.id && msg.embeds && msg.embeds.length && msg.embeds[0].title === embedTitle) {
     // This is our own scheduling message; let's pre-populate all the emojis.
     for (let emojiOption of emojiOptions) {
       msg.react(emojiOption);
@@ -47,19 +47,31 @@ client.on('messageReactionAdd', async (reaction, user) => {
       return;
     }
   }
-  if (reaction.me) {
-    //    return; // This is the bot pre-filling reactions, ignore.
+  if (user.id === client.user.id) {
+    console.log('Bot reaction detected.');
+    return; // This is the bot pre-filling reactions, ignore.
   }
-  console.log(reaction);
+  if (reaction.message.author.id !== client.user.id) {
+    console.log(`Reaction was to another user's message`);
+    return; // This is a reaction to someone else's message
+  }
+  if (!reaction.message.embeds || !reaction.message.embeds.length) {
+    console.log(`Message has no embeds.`);
+    return; // This is somehow not a scheduling message
+  }
 
-  // get that message, and add the author to the value
   const emoji = reaction.emoji.name; // literal emoji
-  // get the messages's embed, add the person's name to the value of the field, and cram it in there. I guess reaction.message.fetch() might be a thing?
-  // field = schedulingEmbed.fields.find(field => field.value.includes(emoji));
-  // https://discordjs.guide/popular-topics/embeds.html#editing-the-embedded-message-content
+  const embed = reaction.message.embeds[0];
 
-  console.log(`${reaction.message.author}'s message "${reaction.message.content}" gained a reaction!`);
-  console.log(`${reaction.count} user(s) have given the same reaction to this message!`);
+  for (let i = 0; i < embed.fields.length; i++) {
+    if (embed.fields[i].name.includes(emoji)) {
+      const users = embed.fields[i].value.split(', ').filter((userId) => userId != '\u200B');
+      users.push(`<@${user.id}>`);
+      embed.fields[i].value = Array.from(new Set(users)).join(', ');
+    }
+  }
+
+  reaction.message.edit(embed);
 });
 
 client.on('messageReactionRemove', async (reaction, user) => {
