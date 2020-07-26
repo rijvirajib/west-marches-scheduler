@@ -6,7 +6,6 @@ import * as moment from 'moment';
 config();
 const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
 
-const bot_id = process.env.BOT_USER_ID;
 const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
 const embedTitle = `React with the associated emojis to indicate your availability for those dates.`;
 
@@ -15,12 +14,6 @@ client.on('ready', () => {
 });
 
 client.on('message', (msg) => {
-  // console.log(msg);
-
-  if (msg.content === 'ping') {
-    msg.reply('pong');
-  }
-
   if (msg.content.includes('!schedule')) {
     const nextWeek = moment().add(7, 'days');
 
@@ -37,7 +30,7 @@ client.on('message', (msg) => {
     msg.channel.send(schedulingEmbed);
   }
 
-  if (msg.author.id === bot_id && msg.embeds && msg.embeds[0].title === embedTitle) {
+  if (msg.author.id === client.user.id && msg.embeds && msg.embeds[0].title === embedTitle) {
     // This is our own scheduling message; let's pre-populate all the emojis.
     for (let emojiOption of emojiOptions) {
       msg.react(emojiOption);
