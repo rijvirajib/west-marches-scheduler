@@ -1,6 +1,6 @@
 // Run dotenv
 import { config } from 'dotenv';
-import { Client, MessageEmbed, Message } from 'discord.js';
+import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser } from 'discord.js';
 import * as moment from 'moment';
 
 config();
@@ -39,6 +39,14 @@ client.on('message', (msg) => {
 });
 
 client.on('messageReactionAdd', async (reaction, user) => {
+  await updateSchedulingMessage(reaction, user);
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+  await updateSchedulingMessage(reaction, user);
+});
+
+const updateSchedulingMessage = async (reaction: MessageReaction, user: User | PartialUser) => {
   if (reaction.partial) {
     try {
       await reaction.fetch();
@@ -47,6 +55,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
       return;
     }
   }
+
   if (user.id === client.user.id) {
     console.log('Bot reaction detected.');
     return; // This is the bot pre-filling reactions, ignore.
@@ -60,22 +69,39 @@ client.on('messageReactionAdd', async (reaction, user) => {
     return; // This is somehow not a scheduling message
   }
 
-  const emoji = reaction.emoji.name; // literal emoji
   const embed = reaction.message.embeds[0];
 
-  for (let i = 0; i < embed.fields.length; i++) {
-    if (embed.fields[i].name.includes(emoji)) {
-      const users = embed.fields[i].value.split(', ').filter((userId) => userId != '\u200B');
-      users.push(`<@${user.id}>`);
-      embed.fields[i].value = Array.from(new Set(users)).join(', ');
-    }
-  }
+  // My brain is fucking mush, there must be a better way to asynchronously iterate through a Map
+  await Promise.all(
+    reaction.message.reactions.cache.map(async (messageReaction, emoji) => {
+      return new Promise(async (resolve) => {
+        try {
+          await messageReaction.users.fetch();
+        } catch (error) {
+          console.error(`Unable to fetch users for message reaction.`);
+        }
+
+        const userMentions = messageReaction.users.cache
+          .filter((user) => user.id != client.user.id)
+          .map((user) => `<@${user.id}>`);
+
+        if (!userMentions.length) {
+          userMentions.push('\u200B');
+        }
+
+        for (let i = 0; i < embed.fields.length; i++) {
+          if (embed.fields[i].name.includes(emoji)) {
+            embed.fields[i].value = userMentions.join(', ');
+            console.log(`Setting field with ${emoji} to ${userMentions}`);
+          }
+        }
+
+        resolve();
+      });
+    })
+  );
 
   reaction.message.edit(embed);
-});
-
-client.on('messageReactionRemove', async (reaction, user) => {
-  // a reaction has been removed.
-});
+};
 
 client.login(process.env.DISCORD_TOKEN);
