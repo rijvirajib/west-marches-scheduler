@@ -1,15 +1,13 @@
 // Run dotenv
 import { config } from 'dotenv';
-import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser } from 'discord.js';
+import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser, EmbedField } from 'discord.js';
 import * as moment from 'moment';
 
 /* TODO
 
-Any mentions in the !schedule trigger are considered to be the DM, and are weighed more heavily;
-after all, can't have a game without a DM.
+When deciding which dates are winning, weigh those including the DM more heavily than those without.
 
-Add a way of showing which dates are winning?
- - and a way to finalize the poll and stop reacting to it.
+A way to finalize the poll and stop reacting to it.
 
 */
 
@@ -25,7 +23,14 @@ client.login(token);
 
 const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
 const emojiRefresh = '🔄';
+const emojiCalendar = '📅';
+const emojiMedals = ['🥇', '🥈', '🥉'];
+const zeroWidthSpace = `\u200B`;
 const embedFooter = `React with the associated emojis to indicate your availability for those dates.\nReact with ${emojiRefresh} to refresh the list.`;
+
+const startsWithEmojiOption = (str: String): boolean => {
+  return emojiOptions.some((emojiOption) => str.startsWith(emojiOption));
+};
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -65,8 +70,10 @@ const scheduleSession = async (msg: Message) => {
   const nextWeek = moment().add(7, 'days');
 
   const mentions = msg.mentions.users.map((user) => `<@${user.id}>`);
-  const requiredPlayers = mentions.length ? `_Required players for this session: ${mentions.join(', ')}_` : '\u200B';
-  const embedTitle = msg.content.replace(/^!schedule ?/, '\u200B').replace(/<@!\d+>/g, `\u200B`);
+  const requiredPlayers = mentions.length
+    ? `_Required players for this session: ${mentions.join(', ')}_`
+    : zeroWidthSpace;
+  const embedTitle = msg.content.replace(/^!schedule ?/, zeroWidthSpace).replace(/<@!\d+>/g, zeroWidthSpace);
 
   const schedulingEmbed = new MessageEmbed()
     .setColor('#0099ff') // left-most bar
@@ -77,9 +84,11 @@ const scheduleSession = async (msg: Message) => {
   for (let i = 0; i < 14; i++) {
     schedulingEmbed.addField(
       `${emojiOptions[i]} ${moment(nextWeek).add(i, 'days').format('dddd, MMMM Do YYYY')}`,
-      '\u200B'
+      zeroWidthSpace
     );
   }
+
+  schedulingEmbed.addField(`${emojiCalendar} Current best dates`, 'none');
 
   msg.channel.send(schedulingEmbed);
 };
@@ -127,7 +136,7 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
           .map((user) => `<@${user.id}>`);
 
         if (!userMentions.length) {
-          userMentions.push('\u200B');
+          userMentions.push(zeroWidthSpace);
         }
 
         for (let i = 0; i < embed.fields.length; i++) {
@@ -140,6 +149,52 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
       });
     })
   );
+
+  // Calculate best current dates
+  const playableDates = [];
+  for (let i = 0; i < embed.fields.length; i++) {
+    if (startsWithEmojiOption(embed.fields[i].name)) {
+      const players = embed.fields[i].value.split(', ').filter((player) => player != zeroWidthSpace);
+      const date = embed.fields[i].name;
+
+      if (players.length > 0) {
+        playableDates.push({ date, players });
+      }
+    }
+  }
+  playableDates.sort((playableDateA, playableDateB) => {
+    return playableDateB.players.length - playableDateA.players.length;
+  });
+
+  const calendarFieldName = `${emojiCalendar} Current best dates`;
+  const calendarFieldValue = playableDates
+    .slice(0, 3) // trim to top three options
+    .map(({ date: date, players: players }) => {
+      // convert object into nice human-readable thing
+      return `${date}: ${players.join(', ')}`;
+    })
+    .map((value) => {
+      // strip out the voting emoji... which turns out to actually be rather annoying.
+      // `emojiOptions` apparently each take up three bytes.
+      return value.substring(3);
+    })
+    .map((value, index) => {
+      // add nice medals
+      if (index < emojiMedals.length) {
+        return `${emojiMedals[index]} ${value}`;
+      }
+      return value;
+    })
+    .join('\n');
+
+  // backwards compatibility - old schedulers may not have a calendar field pre-set.
+  const calendarField = embed.fields.find((field) => field.name.startsWith(emojiCalendar));
+  if (calendarField) {
+    calendarField.name = calendarFieldName;
+    calendarField.value = calendarFieldValue;
+  } else {
+    embed.addField(calendarFieldName, calendarFieldValue);
+  }
 
   reaction.message.edit(embed);
 };
