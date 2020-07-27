@@ -3,34 +3,40 @@ import { config } from 'dotenv';
 import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser } from 'discord.js';
 import * as moment from 'moment';
 
+/* TODO
+
+Any mentions in the !schedule trigger are considered to be the DM, and are weighed more heavily;
+after all, can't have a game without a DM.
+
+Add an extra 🔄 emoji to refresh the list.
+
+Add a way of showing which dates are winning?
+
+*/
+
 config();
 const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
+client.login(process.env.DISCORD_TOKEN);
 
 const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
-const embedTitle = `React with the associated emojis to indicate your availability for those dates.`;
+const embedFooter = `React with the associated emojis to indicate your availability for those dates.`;
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
 
-client.on('message', (msg) => {
+client.on('message', async (msg) => {
   if (msg.content.includes('!schedule')) {
-    const nextWeek = moment().add(7, 'days');
-
-    const schedulingEmbed = new MessageEmbed()
-      .setColor('#0099ff') // left-most bar
-      .setTitle(embedTitle);
-    for (let i = 0; i < 14; i++) {
-      schedulingEmbed.addField(
-        `${emojiOptions[i]} ${moment(nextWeek).add(i, 'days').format('dddd, MMMM Do YYYY')}`,
-        '\u200B'
-      );
-    }
-
-    msg.channel.send(schedulingEmbed);
+    await scheduleSession(msg);
   }
 
-  if (msg.author.id === client.user.id && msg.embeds && msg.embeds.length && msg.embeds[0].title === embedTitle) {
+  if (
+    msg.author.id === client.user.id &&
+    msg.embeds &&
+    msg.embeds.length &&
+    msg.embeds[0].footer &&
+    msg.embeds[0].footer.text === embedFooter
+  ) {
     // This is our own scheduling message; let's pre-populate all the emojis.
     for (let emojiOption of emojiOptions) {
       msg.react(emojiOption);
@@ -45,6 +51,29 @@ client.on('messageReactionAdd', async (reaction, user) => {
 client.on('messageReactionRemove', async (reaction, user) => {
   await updateSchedulingMessage(reaction, user);
 });
+
+const scheduleSession = async (msg: Message) => {
+  const nextWeek = moment().add(7, 'days');
+
+  const mentions = msg.mentions.users.map((user) => `<@${user.id}>`);
+  const requiredPlayers = mentions.length ? `_Required players for this session: ${mentions.join(', ')}_` : '\u200B';
+  const embedTitle = msg.content.replace(/^!schedule ?/, '\u200B').replace(/<@!\d+>/g, `\u200B`);
+
+  const schedulingEmbed = new MessageEmbed()
+    .setColor('#0099ff') // left-most bar
+    .setFooter(embedFooter)
+    .setTitle(embedTitle)
+    .setDescription(requiredPlayers);
+
+  for (let i = 0; i < 14; i++) {
+    schedulingEmbed.addField(
+      `${emojiOptions[i]} ${moment(nextWeek).add(i, 'days').format('dddd, MMMM Do YYYY')}`,
+      '\u200B'
+    );
+  }
+
+  msg.channel.send(schedulingEmbed);
+};
 
 const updateSchedulingMessage = async (reaction: MessageReaction, user: User | PartialUser) => {
   if (reaction.partial) {
@@ -72,6 +101,7 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
   const embed = reaction.message.embeds[0];
 
   // My brain is fucking mush, there must be a better way to asynchronously iterate through a Map
+  // TODO - do these even run asynchronously? Based on the console.logs, they sure don't
   await Promise.all(
     reaction.message.reactions.cache.map(async (messageReaction, emoji) => {
       return new Promise(async (resolve) => {
@@ -92,7 +122,6 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
         for (let i = 0; i < embed.fields.length; i++) {
           if (embed.fields[i].name.includes(emoji)) {
             embed.fields[i].value = userMentions.join(', ');
-            console.log(`Setting field with ${emoji} to ${userMentions}`);
           }
         }
 
@@ -103,5 +132,3 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
 
   reaction.message.edit(embed);
 };
-
-client.login(process.env.DISCORD_TOKEN);
