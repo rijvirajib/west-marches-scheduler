@@ -15,8 +15,14 @@ Add a way of showing which dates are winning?
 */
 
 config();
+
+const token = process.env.BOT_ENV === 'prod' ? process.env.DISCORD_TOKEN_PROD : process.env.DISCORD_TOKEN_DEV;
+if (!token) {
+  throw new Error('No token was defined. Check the env variables: BOT_ENV, DISCORD_TOKEN_PROD, DISCORD_TOKEN_DEV');
+}
+
 const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
-client.login(process.env.DISCORD_TOKEN);
+client.login(token);
 
 const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
 const embedFooter = `React with the associated emojis to indicate your availability for those dates.`;
@@ -102,6 +108,8 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
 
   // My brain is fucking mush, there must be a better way to asynchronously iterate through a Map
   // TODO - do these even run asynchronously? Based on the console.logs, they sure don't
+  // eeeeh, testing this with some toy asyncs, it seems to run these in parallel; i'd bet
+  // money that it's slow because Discord is throttling us.
   await Promise.all(
     reaction.message.reactions.cache.map(async (messageReaction, emoji) => {
       return new Promise(async (resolve) => {
