@@ -8,9 +8,8 @@ import * as moment from 'moment';
 Any mentions in the !schedule trigger are considered to be the DM, and are weighed more heavily;
 after all, can't have a game without a DM.
 
-Add an extra 🔄 emoji to refresh the list.
-
 Add a way of showing which dates are winning?
+ - and a way to finalize the poll and stop reacting to it.
 
 */
 
@@ -25,7 +24,8 @@ const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
 client.login(token);
 
 const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
-const embedFooter = `React with the associated emojis to indicate your availability for those dates.`;
+const emojiRefresh = '🔄';
+const embedFooter = `React with the associated emojis to indicate your availability for those dates.\nReact with ${emojiRefresh} to refresh the list.`;
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}!`);
@@ -47,6 +47,9 @@ client.on('message', async (msg) => {
     for (let emojiOption of emojiOptions) {
       msg.react(emojiOption);
     }
+
+    // Add refresh emoji
+    msg.react(emojiRefresh);
   }
 });
 
