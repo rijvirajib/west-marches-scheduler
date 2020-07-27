@@ -5,13 +5,15 @@ import * as moment from 'moment';
 
 /* TODO
 
-When deciding which dates are winning, weigh those including the DM more heavily than those without.
-
 A way to finalize the poll and stop reacting to it.
 
 */
 
 config();
+
+const intersection = (arrayA: any[], arrayB: any[]): any[] => {
+  return arrayA.filter((x) => arrayB.includes(x));
+};
 
 const token = process.env.BOT_ENV === 'prod' ? process.env.DISCORD_TOKEN_PROD : process.env.DISCORD_TOKEN_DEV;
 if (!token) {
@@ -70,16 +72,14 @@ const scheduleSession = async (msg: Message) => {
   const nextWeek = moment().add(7, 'days');
 
   const mentions = msg.mentions.users.map((user) => `<@${user.id}>`);
-  const requiredPlayers = mentions.length
-    ? `_Required players for this session: ${mentions.join(', ')}_`
-    : zeroWidthSpace;
+  const description = mentions.length ? `_Required players for this session: ${mentions.join(', ')}_` : zeroWidthSpace;
   const embedTitle = msg.content.replace(/^!schedule ?/, zeroWidthSpace).replace(/<@!\d+>/g, zeroWidthSpace);
 
   const schedulingEmbed = new MessageEmbed()
     .setColor('#0099ff') // left-most bar
     .setFooter(embedFooter)
     .setTitle(embedTitle)
-    .setDescription(requiredPlayers);
+    .setDescription(description);
 
   for (let i = 0; i < 14; i++) {
     schedulingEmbed.addField(
@@ -133,6 +133,7 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
 
         const userMentions = messageReaction.users.cache
           .filter((user) => user.id != client.user.id)
+          .sort()
           .map((user) => `<@${user.id}>`);
 
         if (!userMentions.length) {
@@ -151,10 +152,14 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
   );
 
   // Calculate best current dates
+  const requiredPlayers = embed.description.match(/<@\d+>/g) || [];
   const playableDates = [];
   for (let i = 0; i < embed.fields.length; i++) {
     if (startsWithEmojiOption(embed.fields[i].name)) {
-      const players = embed.fields[i].value.split(', ').filter((player) => player != zeroWidthSpace);
+      const players = embed.fields[i].value
+        .split(', ')
+        .filter((player) => player != zeroWidthSpace)
+        .sort();
       const date = embed.fields[i].name;
 
       if (players.length > 0) {
@@ -163,12 +168,20 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
     }
   }
   playableDates.sort((playableDateA, playableDateB) => {
+    // If one date includes a required player, but the other does not, consider it to be weighted higher.
+
+    const requiredPlayersA = intersection(playableDateA.players, requiredPlayers);
+    const requiredPlayersB = intersection(playableDateB.players, requiredPlayers);
+    if (requiredPlayersA.length !== requiredPlayersB.length) {
+      return requiredPlayersB.length - requiredPlayersA.length;
+    }
+    // otherwise, just go by player count.
     return playableDateB.players.length - playableDateA.players.length;
   });
 
   const calendarFieldName = `${emojiCalendar} Current best dates`;
   const calendarFieldValue = playableDates
-    .slice(0, 3) // trim to top three options
+    .slice(0, 5) // trim to top three options
     .map(({ date: date, players: players }) => {
       // convert object into nice human-readable thing
       return `${date}: ${players.join(', ')}`;
