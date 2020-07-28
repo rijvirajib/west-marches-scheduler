@@ -5,7 +5,26 @@ import * as moment from 'moment';
 
 /* TODO
 
-A way to finalize the poll and stop reacting to it.
+Create manual for this thing, linked from the scheduling message itself.
+
+A way to finalize the poll and stop reacting to it?
+ - either one of the people with the DM role, or one of the required players
+   would select the winning date by reacting with the appropriate medal emoji?
+
+Ability for a DM-role player to add themselves as a required player by reacting with an Emoji
+ - also, the ability for a DM-role to _remove_ a required player by reacting with a different emoji.
+
+A way to schedule hourly blocks.
+  DM the initial request individual messages with dates; they emoji-react
+  to the specific dates with the hours they want the game to start and stop.
+  Then emoji react to a final "ready to go!" message to post to main channel.
+
+Maybe listing all of the current scheduled things?
+ - Maybe give the bot the ability to pin active schedules?
+ - Twice a day, ping the channel about responding
+
+ Oh my god, I can add CUSTOM EMOJIs to represent the days-of-the-month!
+
 
 */
 
@@ -39,8 +58,15 @@ client.on('ready', () => {
 });
 
 client.on('message', async (msg) => {
-  if (msg.content.includes('!schedule')) {
-    await scheduleSession(msg);
+  if (msg.content.startsWith('!schedule')) {
+    try {
+      await scheduleSession(msg);
+    } catch (err) {
+      console.error('Unable to create session schedule embed', {
+        message: msg.id,
+        user: msg.author.id,
+      });
+    }
   }
 
   if (
@@ -61,11 +87,29 @@ client.on('message', async (msg) => {
 });
 
 client.on('messageReactionAdd', async (reaction, user) => {
-  await updateSchedulingMessage(reaction, user);
+  try {
+    await updateSchedulingMessage(reaction, user);
+  } catch (err) {
+    console.error('Unable to execute updateSchedulingMessage', {
+      event: 'messageReactionAdd',
+      message: reaction.message.id,
+      reaction: reaction.emoji.id,
+      user: user.id,
+    });
+  }
 });
 
 client.on('messageReactionRemove', async (reaction, user) => {
-  await updateSchedulingMessage(reaction, user);
+  try {
+    await updateSchedulingMessage(reaction, user);
+  } catch (err) {
+    console.error('Unable to execute updateSchedulingMessage', {
+      event: 'messageReactionRemove',
+      message: reaction.message.id,
+      reaction: reaction.emoji.id,
+      user: user.id,
+    });
+  }
 });
 
 const scheduleSession = async (msg: Message) => {
