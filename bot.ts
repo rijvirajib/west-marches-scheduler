@@ -23,6 +23,8 @@ Maybe listing all of the current scheduled things?
  - Maybe give the bot the ability to pin active schedules?
  - Twice a day, ping the channel about responding
 
+Show how many players chose each thing.
+
  Oh my god, I can add CUSTOM EMOJIs to represent the days-of-the-month!
 
 
