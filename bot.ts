@@ -1,6 +1,6 @@
 // Run dotenv
 import { config } from 'dotenv';
-import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser, EmbedField } from 'discord.js';
+import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser, EmbedField, Permissions } from 'discord.js';
 import * as moment from 'moment';
 
 /* TODO
@@ -14,6 +14,7 @@ A way to finalize the poll and stop reacting to it?
 Ability for a DM-role player to add themselves as a required player by reacting with an Emoji
  - also, the ability for a DM-role to _remove_ a required player by reacting with a different emoji.
 
+
 A way to schedule hourly blocks.
   DM the initial request individual messages with dates; they emoji-react
   to the specific dates with the hours they want the game to start and stop.
@@ -26,7 +27,13 @@ Maybe listing all of the current scheduled things?
 Show how many players chose each thing.
 
  Oh my god, I can add CUSTOM EMOJIs to represent the days-of-the-month!
+*/
 
+/* USEFUL STUFF
+
+
+check if a member is an admin:
+`member.hasPermission(Permissions.FLAGS.ADMINISTRATOR`
 
 */
 
