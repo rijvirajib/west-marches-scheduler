@@ -25,16 +25,30 @@ TODO - formatting in bot and website should be identical. extract this to common
       const chosenTimes = {};
 
       window.addEventListener('load', (event) => {
+        // did we get dates in query param?
+        const query = new URLSearchParams(window.location.search);
+        if (query.get('startDate')) {
+          document.getElementById('startDate').value = query.get('startDate');
+        }
+        if (query.get('endDate')) {
+          document.getElementById('endDate').value = query.get('endDate');
+        }
+
         refreshDates();
       });
 
       const generateJson = () => {
         const multipleSessions = document.getElementById('multipleSessions').checked;
         const sessionLength = parseInt(document.getElementById('sessionLength').value, 10);
+        const options = Object.keys(multipleSessions ? chosenTimes : chosenDates);
+
+        if (!options.length < 2) {
+          alert('You must select at least two options.');
+        }
 
         const result = {
           sessionLength,
-          options: Object.keys(multipleSessions ? chosenTimes : chosenDates),
+          options,
         };
 
         console.log(result);
@@ -133,17 +147,17 @@ TODO - formatting in bot and website should be identical. extract this to common
       <div class="row">
         <label class="col-sm-12 col-md-2" for="startDate">Start Date</label>
         <div class="col-sm-12 col-md-10 input-group">
-          <input type="date" class="form-control" id="startDate" value="2020-07-01" onchange="refreshDates()" />
+          <input type="date" class="form-control" id="startDate" onchange="refreshDates()" />
         </div>
       </div>
       <div class="row">
         <label class="col-sm-12 col-md-2" for="endDate">End Date</label>
         <div class="col-sm-12 col-md-10 input-group">
-          <input type="date" class="form-control" id="endDate" value="2020-07-03" onchange="refreshDates()" />
+          <input type="date" class="form-control" id="endDate" onchange="refreshDates()" />
         </div>
       </div>
       <div class="row">
-        <label class="col-sm-12 col-md-2" for="endDate">Session Length</label>
+        <label class="col-sm-12 col-md-2" for="sessionLength">Session Length</label>
 
         <div class="col-sm-12 col-md-10 input-group">
           <select id="sessionLength" onchange="refreshDates()">
