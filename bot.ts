@@ -11,6 +11,7 @@ import {
   EmbedField,
   Permissions,
   DiscordAPIError,
+  Channel,
 } from 'discord.js';
 import * as moment from 'moment';
 
@@ -59,6 +60,17 @@ const intersection = (arrayA: any[], arrayB: any[]): any[] => {
   return arrayA.filter((x) => arrayB.includes(x));
 };
 
+const shuffledCopy = (input: any[]): any[] => {
+  const array = [...input]; // copy array
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * i);
+    const temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+  }
+  return array;
+};
+
 const token = process.env.BOT_ENV === 'prod' ? process.env.DISCORD_TOKEN_PROD : process.env.DISCORD_TOKEN_DEV;
 if (!token) {
   throw new Error('No token was defined. Check the env variables: BOT_ENV, DISCORD_TOKEN_PROD, DISCORD_TOKEN_DEV');
@@ -67,7 +79,67 @@ if (!token) {
 const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
 client.login(token);
 
-const emojiOptions = [`0️⃣`, `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`, `5️⃣`, `6️⃣`, `7️⃣`, `8️⃣`, `9️⃣`, `🔟`, `#️⃣`, `*️⃣`, `🔤`];
+// TODO - there's a limit to how many reasonably readable emoji reactions we can shove onto a message.
+// We need to limit the number of choices; that probably means extracting `emojiOptions` into its own thing
+// so that scheduler.html can use it, too.
+
+const emojiOptions = [
+  '❤️',
+  '🧡',
+  '💛',
+  '💚',
+  '💙',
+  '💜',
+  '🖤',
+  '🅰️',
+  '🅱️',
+  '🆎',
+  '🆑',
+  '🅾️',
+  '🆘',
+  '0️⃣',
+  '1️⃣',
+  '2️⃣',
+  '3️⃣',
+  '4️⃣',
+  '5️⃣',
+  '6️⃣',
+  '7️⃣',
+  '8️⃣',
+  '9️⃣',
+  '🔟',
+  '🔢',
+  '#️⃣',
+  '*️⃣',
+  '🔤',
+  '🔡',
+  '🔠',
+  '🔴',
+  '🔵',
+  '⚫️',
+  '🔺',
+  '🔻',
+  '🔶',
+  '🔷',
+  '♠️',
+  '♣️',
+  '♥️',
+  '♦️',
+  '⛎',
+  '♈️',
+  '♉️',
+  '♊️',
+  '♋️',
+  '♌️',
+  '♍️',
+  '♎️',
+  '♏️',
+  '♐️',
+  '♑️',
+  '♒️',
+  '♓️',
+];
+
 const emojiRefresh = '🔄';
 const emojiCalendar = '📅';
 const emojiMedals = ['🥇', '🥈', '🥉'];
@@ -83,36 +155,12 @@ client.on('ready', () => {
 });
 
 client.on('message', async (msg) => {
-  if (msg.content.startsWith('!hourly')) {
-    msg.author.send(`Go to website, fill out stuff, paste the garbage back in here.`);
+  if (msg.content.startsWith(`<@!${client.user.id}>`) || msg.content.startsWith(`<@${client.user.id}>`)) {
+    await generateScheduleEmbed(msg);
   }
-  // listen for a DM from a user with JSON-ified ... stuff
 
   if (msg.content.startsWith('!schedule')) {
-    try {
-      await scheduleSession(msg);
-    } catch (err) {
-      console.error('Unable to create session schedule embed', {
-        message: msg.id,
-        user: msg.author.id,
-      });
-    }
-  }
-
-  if (
-    msg.author.id === client.user.id &&
-    msg.embeds &&
-    msg.embeds.length &&
-    msg.embeds[0].footer &&
-    msg.embeds[0].footer.text === embedFooter
-  ) {
-    // This is our own scheduling message; let's pre-populate all the emojis.
-    for (let emojiOption of emojiOptions) {
-      msg.react(emojiOption);
-    }
-
-    // Add refresh emoji
-    msg.react(emojiRefresh);
+    await generateScheduleLink(msg);
   }
 });
 
@@ -142,29 +190,129 @@ client.on('messageReactionRemove', async (reaction, user) => {
   }
 });
 
-const scheduleSession = async (msg: Message) => {
-  const nextWeek = moment().add(7, 'days');
+const generateScheduleLink = async (msg: Message) => {
+  const startDate = moment().add(1, 'week').format('YYYY-MM-DD');
+  const endDate = moment().add(3, 'weeks').format('YYYY-MM-DD');
+  const guildId = msg.guild.id;
+  const channelId = msg.channel.id;
+  const memberId = msg.author.id;
+  const requiredPlayerIds = msg.mentions.users.map((user) => user.id);
+  const sessionTitle = msg.content
+    .replace(/^!schedule ?/, '')
+    .replace(/<@!?\d+>/g, '')
+    .trim();
 
-  const mentions = msg.mentions.users.map((user) => `<@${user.id}>`);
-  const description = mentions.length ? `_Required players for this session: ${mentions.join(', ')}_` : zeroWidthSpace;
-  const embedTitle = msg.content.replace(/^!schedule ?/, zeroWidthSpace).replace(/<@!\d+>/g, zeroWidthSpace);
+  const linkData = {
+    startDate,
+    endDate,
+    guildId,
+    channelId,
+    memberId,
+    requiredPlayerIds,
+    sessionTitle,
+  };
+
+  const encodedData = Buffer.from(JSON.stringify(linkData)).toString('base64');
+
+  const link = `https://pavellishin.github.io/west-marches-scheduler/docs/scheduler.html?data=${encodedData}`;
+
+  try {
+    await msg.channel.send(
+      `Ok, <@${memberId}> - please follow this link to select the options for the session. Once you're done, please paste the results here, tagging me first: ${link}`
+    );
+  } catch (err) {
+    console.log('Unable to post link to channel', { message: err.message, link });
+  }
+};
+
+const generateScheduleEmbed = async (msg: Message) => {
+  // Remove the @mention, and any possible newlines, in case the copy-and-paste is wonky.
+  const robotGibberish = msg.content.replace(new RegExp(`<@!?${client.user.id}> ?`), '').replace('\n', '');
+  let jsonString;
+  let schedulingData;
+
+  try {
+    jsonString = Buffer.from(robotGibberish, 'base64').toString();
+  } catch (err) {
+    console.log('Unable to base64-decode gibberish', { robotGibberish, errMessage: err.message });
+    msg.channel.send('Unable to parse robot gibberish! The base64-decoded data could not be parsed.');
+    return;
+  }
+  try {
+    schedulingData = JSON.parse(jsonString);
+  } catch (err) {
+    console.log('Unable to parse base64-decoded JSON', { jsonString, errMessage: err.message });
+    msg.channel.send('Unable to parse robot gibberish! The json data could not be parsed.');
+    return;
+  }
+
+  console.log(schedulingData);
+
+  const requiredPlayers = schedulingData.requiredPlayers || [];
+  const sessionTitle = schedulingData.sessionTitle;
+  const options = schedulingData.options;
+  const multipleSessions = schedulingData.multipleSessions;
+  const sessionLength = schedulingData.sessionLength || 4; // defaults to four hours
+
+  if (!options) {
+    console.log('No options were given in scheduling data', { schedulingData });
+    msg.channel.send('No options were present in the data!');
+  }
+
+  if (options.length > emojiOptions.length) {
+    console.log('More options than emoji options');
+    msg.channel.send('Well, this is embarassing. There are more options than I have emojis for.');
+  }
+
+  const emojiSubset = shuffledCopy(emojiOptions).slice(0, options.length);
+
+  const embedDescription = requiredPlayers.length
+    ? `_Required player${requiredPlayers.length === 1 ? '' : 's'} for this session: ${requiredPlayers.join(', ')}_`
+    : zeroWidthSpace;
+  const embedTitle = sessionTitle || `An Untitled Adventure`;
 
   const schedulingEmbed = new MessageEmbed()
     .setColor('#0099ff') // left-most bar
     .setFooter(embedFooter)
     .setTitle(embedTitle)
-    .setDescription(description);
+    .setDescription(embedDescription);
 
-  for (let i = 0; i < 14; i++) {
-    schedulingEmbed.addField(
-      `${emojiOptions[i]} ${moment(nextWeek).add(i, 'days').format('dddd, MMMM Do YYYY')}`,
-      zeroWidthSpace
-    );
+  // if (
+  //   msg.author.id === client.user.id &&
+  //   msg.embeds &&
+  //   msg.embeds.length &&
+  //   msg.embeds[0].footer &&
+  //   msg.embeds[0].footer.text === embedFooter
+  // ) {
+  //   // This is our own scheduling message; let's pre-populate all the emojis.
+  //   for (let emojiOption of emojiOptions) {
+  //     msg.react(emojiOption);
+  //   }
+
+  //   // Add refresh emoji
+  //   msg.react(emojiRefresh);
+  // }
+
+  for (const optionIndex in options) {
+    const option = moment(options[optionIndex]);
+    if (multipleSessions) {
+      const dateLabel = option.format('dddd, MMMM Do YYYY');
+      const startTime = option.format('h A');
+      const endTime = option.clone().add(sessionLength, 'hours').format('h A');
+
+      schedulingEmbed.addField(`${emojiSubset[optionIndex]} ${dateLabel} ${startTime}-${endTime}`, zeroWidthSpace);
+    } else {
+      const dateLabel = option.format('dddd, MMMM Do YYYY');
+      schedulingEmbed.addField(`${emojiSubset[optionIndex]} ${dateLabel}`, zeroWidthSpace);
+    }
   }
 
   schedulingEmbed.addField(`${emojiCalendar} Current best dates`, 'none');
 
-  msg.channel.send(schedulingEmbed);
+  const sentMessage = await msg.channel.send(schedulingEmbed);
+  for (const emoji of emojiSubset) {
+    sentMessage.react(emoji);
+  }
 };
 
 const updateSchedulingMessage = async (reaction: MessageReaction, user: User | PartialUser) => {
@@ -226,7 +374,7 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
   );
 
   // Calculate best current dates
-  const requiredPlayers = embed.description.match(/<@\d+>/g) || [];
+  const requiredPlayers = embed.description.match(/<@!?\d+>/g) || [];
   const playableDates = [];
   for (let i = 0; i < embed.fields.length; i++) {
     if (startsWithEmojiOption(embed.fields[i].name)) {

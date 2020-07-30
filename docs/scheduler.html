@@ -23,21 +23,36 @@ TODO - formatting in bot and website should be identical. extract this to common
     <script>
       const chosenDates = {};
       const chosenTimes = {};
+      const query = new URLSearchParams(window.location.search);
+      const data = JSON.parse(atob(query.get('data') || '') || {});
+
+      const { startDate, endDate, guildId, memberId, channelId, sessionTitle } = data;
+      const requiredPlayerIds = data.requiredPlayerIds || [];
 
       window.addEventListener('load', (event) => {
-        // did we get dates in query param?
-        const query = new URLSearchParams(window.location.search);
-        if (query.get('startDate')) {
-          document.getElementById('startDate').value = query.get('startDate');
-        }
-        if (query.get('endDate')) {
-          document.getElementById('endDate').value = query.get('endDate');
+        try {
+          document.getElementById('guildId').value = guildId || '';
+          document.getElementById('memberId').value = memberId || '';
+          document.getElementById('channelId').value = channelId || '';
+          document.getElementById('sessionTitleText').innerText = sessionTitle || '';
+          document.getElementById('requiredPlayerCountText').innerText = requiredPlayerIds.length
+            ? `${requiredPlayerIds.length} required player${requiredPlayerIds.length === 1 ? '' : 's'}`
+            : '';
+
+          if (startDate) {
+            document.getElementById('startDate').value = startDate;
+          }
+          if (endDate) {
+            document.getElementById('endDate').value = endDate;
+          }
+        } catch (err) {
+          // unable to correctly parse data
         }
 
         refreshDates();
       });
 
-      const generateJson = () => {
+      const generateGibberish = () => {
         const multipleSessions = document.getElementById('multipleSessions').checked;
         const sessionLength = parseInt(document.getElementById('sessionLength').value, 10);
         const options = Object.keys(multipleSessions ? chosenTimes : chosenDates);
@@ -49,14 +64,25 @@ TODO - formatting in bot and website should be identical. extract this to common
 
         const result = {
           sessionLength,
+          multipleSessions,
           options,
+          guildId,
+          memberId,
+          channelId,
+          requiredPlayerIds,
+          sessionTitle,
         };
 
         const robotGibberish = document.getElementById('robotGibberish');
-        robotGibberish.value = JSON.stringify(result);
+        robotGibberish.value = btoa(JSON.stringify(result));
       };
 
-      const copyJson = () => {
+      const clearGibberish = () => {
+        const robotGibberish = document.getElementById('robotGibberish');
+        robotGibberish.value = '';
+      };
+
+      const copyGibberish = () => {
         const robotGibberish = document.getElementById('robotGibberish');
         navigator.clipboard.writeText(robotGibberish.value);
       };
@@ -82,6 +108,7 @@ TODO - formatting in bot and website should be identical. extract this to common
       };
 
       const refreshDates = () => {
+        clearGibberish();
         const startDate = moment(document.getElementById('startDate').value);
         const endDate = moment(document.getElementById('endDate').value);
 
@@ -138,6 +165,12 @@ TODO - formatting in bot and website should be identical. extract this to common
   </head>
 
   <body>
+    <input type="hidden" id="guildId" />
+    <input type="hidden" id="memberId" />
+    <input type="hidden" id="channelId" />
+    <input type="hidden" id="requiredPlayerIds" />
+    <input type="hidden" id="sessionTitle" />
+
     <div class="container">
       <div class="row">
         <div class="col">
@@ -147,7 +180,8 @@ TODO - formatting in bot and website should be identical. extract this to common
 
       <div class="row">
         <div class="col">
-          <h3>Start and End Date</h3>
+          <h3 id="sessionTitleText"></h3>
+          <b id="requiredPlayerCountText"></b>
         </div>
       </div>
 
@@ -188,7 +222,7 @@ TODO - formatting in bot and website should be identical. extract this to common
       <div class="row">
         <div class="col-12 input-group">
           <div class="input-group-prepend">
-            <button class="btn btn-primary" onclick="generateJson()">Generate Robot Gibberish</button>
+            <button class="btn btn-primary" onclick="generateGibberish()">Generate Robot Gibberish</button>
           </div>
           <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
         </div>
@@ -197,9 +231,30 @@ TODO - formatting in bot and website should be identical. extract this to common
       <div class="row mt-3 mb-3">
         <div class="col-12">
           Select the start and end date, and then choose the dates/times you wish to make available for other players to
-          vote on. Then, press the "Generate Robot Gibberish" button, and once the gibberish is generated,
-          <button class="btn btn-success" onclick="copyJson()">copy the gibberish</button> and paste it back to the bot
-          in Discord
+          vote on. Then, press the
+          <button class="btn btn-primary btn-sm" onclick="generateGibberish()">Generate Robot Gibberish</button> button,
+          and once the gibberish is generated,
+          <button class="btn btn-success btn-sm" onclick="copyGibberish()">
+            <svg
+              width="1em"
+              height="1em"
+              viewBox="0 0 16 16"
+              class="bi bi-clipboard-plus"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"
+              />
+              <path
+                fill-rule="evenodd"
+                d="M9.5 1h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3zM8 7a.5.5 0 0 1 .5.5V9H10a.5.5 0 0 1 0 1H8.5v1.5a.5.5 0 0 1-1 0V10H6a.5.5 0 0 1 0-1h1.5V7.5A.5.5 0 0 1 8 7z"
+              />
+            </svg>
+            copy the gibberish
+          </button>
+          and paste it back to the bot in Discord, tagging it with <code>@West Marches scheduler</code>
         </div>
       </div>
 
