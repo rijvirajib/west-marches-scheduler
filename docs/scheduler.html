@@ -42,7 +42,7 @@ TODO - formatting in bot and website should be identical. extract this to common
         const sessionLength = parseInt(document.getElementById('sessionLength').value, 10);
         const options = Object.keys(multipleSessions ? chosenTimes : chosenDates);
 
-        if (!options.length < 2) {
+        if (options.length < 2) {
           alert('You must select at least two options.');
         }
 
