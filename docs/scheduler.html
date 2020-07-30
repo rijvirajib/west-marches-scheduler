@@ -1,0 +1,313 @@
+<!---
+
+TODO: test columns on small devices, I may have to do my own damn media queries.
+Thanks, Bootstrap.
+
+TODO - formatting in bot and website should be identical. extract this to common JS library. Add build step. Turn this into work.
+
+
+--->
+<html>
+  <head>
+    <link rel="stylesheet" href="bootstrap.min.css" type="text/css" />
+    <!-- <script src="bootstrap.min.js"></script> -->
+    <style>
+      .timeSelectors {
+        column-count: 3;
+      }
+      .timeSelectors label {
+        display: block;
+      }
+
+      textarea {
+        height: 15em !important;
+      }
+    </style>
+    <script src="moment.min.js"></script>
+    <script>
+      const chosenDates = {};
+      const chosenTimes = {};
+      const query = new URLSearchParams(window.location.search);
+      const data = JSON.parse(atob(query.get('data') || '') || {});
+
+      const { startDate, endDate, guildId, memberId, channelId, sessionTitle } = data;
+      const requiredPlayerIds = data.requiredPlayerIds || [];
+
+      window.addEventListener('load', (event) => {
+        try {
+          document.getElementById('guildId').value = guildId || '';
+          document.getElementById('memberId').value = memberId || '';
+          document.getElementById('channelId').value = channelId || '';
+          document.getElementById('sessionTitleText').innerText = sessionTitle || '';
+          document.getElementById('requiredPlayerCountText').innerText = requiredPlayerIds.length
+            ? `${requiredPlayerIds.length} required player${requiredPlayerIds.length === 1 ? '' : 's'}`
+            : '';
+
+          if (startDate) {
+            document.getElementById('startDate').value = startDate;
+          }
+          if (endDate) {
+            document.getElementById('endDate').value = endDate;
+          }
+        } catch (err) {
+          // unable to correctly parse data
+        }
+
+        refreshDates();
+      });
+
+      const generateGibberish = () => {
+        const multipleSessions = document.getElementById('multipleSessions').checked;
+        const sessionLength = parseInt(document.getElementById('sessionLength').value, 10);
+        const options = Object.keys(multipleSessions ? chosenTimes : chosenDates);
+
+        if (options.length < 2) {
+          alert('You must select at least two options.');
+          return;
+        }
+
+        const result = {
+          sessionLength,
+          multipleSessions,
+          options,
+          guildId,
+          memberId,
+          channelId,
+          requiredPlayerIds,
+          sessionTitle,
+        };
+
+        const robotGibberish = document.getElementById('robotGibberish');
+        robotGibberish.value = btoa(JSON.stringify(result));
+      };
+
+      const clearGibberish = () => {
+        const robotGibberish = document.getElementById('robotGibberish');
+        robotGibberish.value = '';
+      };
+
+      const copyGibberish = () => {
+        const robotGibberish = document.getElementById('robotGibberish');
+        navigator.clipboard.writeText(robotGibberish.value);
+      };
+
+      const selectSession = (checkbox) => {
+        const multipleSessions = document.getElementById('multipleSessions').checked;
+
+        if (multipleSessions) {
+          const key = moment(checkbox.dataset.date).hour(checkbox.dataset.time).format('YYYY-MM-DD HH:00:00');
+          if (checkbox.checked) {
+            chosenTimes[key] = true;
+          } else {
+            delete chosenTimes[key];
+          }
+        } else {
+          const key = `${checkbox.dataset.date}`;
+          if (checkbox.checked) {
+            chosenDates[key] = true;
+          } else {
+            delete chosenDates[key];
+          }
+        }
+      };
+
+      const refreshDates = () => {
+        clearGibberish();
+        const startDate = moment(document.getElementById('startDate').value);
+        const endDate = moment(document.getElementById('endDate').value);
+
+        if (!startDate.isValid() || !endDate.isValid()) {
+          return;
+        }
+
+        const $sessionSelector = document.getElementById('sessionSelector');
+        $sessionSelector.innerHTML = '';
+
+        const multipleSessions = document.getElementById('multipleSessions').checked;
+        const sessionLength = parseInt(document.getElementById('sessionLength').value, 10);
+
+        for (
+          let currentDate = startDate.clone();
+          currentDate.isSameOrBefore(endDate);
+          currentDate = currentDate.add(1, 'days')
+        ) {
+          if (multipleSessions) {
+            const $dateLabelDiv = document.createElement('div');
+            $dateLabelDiv.className = 'col-12 m-2';
+            $dateLabelDiv.innerHTML = `<b>${currentDate.format('dddd, MMMM Do YYYY')}</b>`;
+            $sessionSelector.appendChild($dateLabelDiv);
+
+            const $timeDiv = document.querySelector('div.d-none div.timeSelectors').cloneNode(true);
+            const checkboxes = $timeDiv.querySelectorAll('input');
+            checkboxes.forEach((checkbox) => {
+              checkbox.dataset.date = currentDate.format('YYYY-MM-DD');
+
+              const key = `${checkbox.dataset.date} ${checkbox.dataset.time}`;
+              const isSelected = !!chosenTimes[key];
+              if (isSelected) {
+                checkbox.checked = true;
+              }
+
+              const labelSpan = checkbox.parentNode.getElementsByTagName('span')[0];
+              const startTime = currentDate.clone().hour(checkbox.dataset.time);
+              const endTime = startTime.clone().add(sessionLength, 'hours');
+              labelSpan.innerText = `${startTime.format('h A')} - ${endTime.format('h A')}`;
+            });
+            $sessionSelector.appendChild($timeDiv);
+          } else {
+            const isSelected = !!chosenDates[currentDate.format('YYYY-MM-DD')];
+            const $dateLabelDiv = document.createElement('div');
+            $dateLabelDiv.className = 'col-12';
+            $dateLabelDiv.innerHTML = `<label><input type="checkbox" onclick="selectSession(this)" data-date="${currentDate.format(
+              'YYYY-MM-DD'
+            )}" ${isSelected ? 'checked' : ''} /> <b>${currentDate.format('dddd, MMMM Do YYYY')}</b>`;
+            $sessionSelector.appendChild($dateLabelDiv);
+          }
+        }
+      };
+    </script>
+  </head>
+
+  <body>
+    <input type="hidden" id="guildId" />
+    <input type="hidden" id="memberId" />
+    <input type="hidden" id="channelId" />
+    <input type="hidden" id="requiredPlayerIds" />
+    <input type="hidden" id="sessionTitle" />
+
+    <div class="container">
+      <div class="row">
+        <div class="col">
+          <h1>West Marches Scheduler</h1>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <h3 id="sessionTitleText"></h3>
+          <b id="requiredPlayerCountText"></b>
+        </div>
+      </div>
+
+      <div class="row">
+        <label class="col-sm-12 col-md-2" for="startDate">Start Date</label>
+        <div class="col-sm-12 col-md-10 input-group">
+          <input type="date" class="form-control" id="startDate" onchange="refreshDates()" />
+        </div>
+      </div>
+      <div class="row">
+        <label class="col-sm-12 col-md-2" for="endDate">End Date</label>
+        <div class="col-sm-12 col-md-10 input-group">
+          <input type="date" class="form-control" id="endDate" onchange="refreshDates()" />
+        </div>
+      </div>
+      <div class="row">
+        <label class="col-sm-12 col-md-2" for="sessionLength">Session Length</label>
+
+        <div class="col-sm-12 col-md-10 input-group">
+          <select id="sessionLength" onchange="refreshDates()">
+            <option value="2">2 hours</option>
+            <option value="3">3 hours</option>
+            <option value="4" selected>4 hours</option>
+            <option value="5">5 hours</option>
+            <option value="6">6 hours</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group row">
+        <div class="offset-sm-0 col-sm-12 offset-md-2 col-md-10">
+          <input type="checkbox" id="multipleSessions" onclick="refreshDates()" />
+          <label for="multipleSessions">Multiple sessions per day?</label>
+        </div>
+      </div>
+
+      <div class="row mt-3 mb-3">
+        <div class="col-12">
+          Select the start and end date, and then choose the dates/times you wish to make available for other players to
+          vote on. Then, press the
+          <button class="btn btn-primary btn-sm" onclick="generateGibberish()">Generate Robot Gibberish</button> button,
+          and once the gibberish is generated,
+          <button class="btn btn-success btn-sm" onclick="copyGibberish()">
+            <svg
+              width="1em"
+              height="1em"
+              viewBox="0 0 16 16"
+              class="bi bi-clipboard-plus"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"
+              />
+              <path
+                fill-rule="evenodd"
+                d="M9.5 1h-3a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3zM8 7a.5.5 0 0 1 .5.5V9H10a.5.5 0 0 1 0 1H8.5v1.5a.5.5 0 0 1-1 0V10H6a.5.5 0 0 1 0-1h1.5V7.5A.5.5 0 0 1 8 7z"
+              />
+            </svg>
+            copy the gibberish
+          </button>
+          and paste it back to the bot in Discord, tagging it with <code>@West Marches scheduler</code>
+        </div>
+      </div>
+
+      <div id="sessionSelector" class="row"></div>
+
+      <div class="row">
+        <div class="col-12 input-group">
+          <div class="input-group-prepend">
+            <button class="btn btn-primary" onclick="generateGibberish()">Generate Robot Gibberish</button>
+          </div>
+          <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
+        </div>
+      </div>
+
+      <div class="d-none">
+        <div class="timeSelectors">
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="8" /> <span>8 AM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="9" /> <span>9 AM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="10" /> <span>10 AM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="11" /> <span>11 AM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="12" /> <span>12 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="13" /> <span>1 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="14" /> <span>2 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="15" /> <span>3 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="16" /> <span>4 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="17" /> <span>5 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="18" /> <span>6 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="19" /> <span>7 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="20" /> <span>8 PM</span></label>
+          </div>
+          <div class="col">
+            <label><input type="checkbox" onclick="selectSession(this)" data-time="21" /> <span>9 PM</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
