@@ -1,6 +1,17 @@
 // Run dotenv
 import { config } from 'dotenv';
-import { Client, MessageEmbed, Message, MessageReaction, User, PartialUser, EmbedField, Permissions } from 'discord.js';
+import {
+  Client,
+  DMChannel,
+  MessageEmbed,
+  Message,
+  MessageReaction,
+  User,
+  PartialUser,
+  EmbedField,
+  Permissions,
+  DiscordAPIError,
+} from 'discord.js';
 import * as moment from 'moment';
 
 /* TODO
@@ -16,9 +27,14 @@ Ability for a DM-role player to add themselves as a required player by reacting 
 
 
 A way to schedule hourly blocks.
-  DM the initial request individual messages with dates; they emoji-react
-  to the specific dates with the hours they want the game to start and stop.
-  Then emoji react to a final "ready to go!" message to post to main channel.
+  - ok, the PM-the-user idea sucks. For one, we don't have good emojis mapping times-of-day.
+    Yes, we have the clocks, but those are hard to read, especially on a tiny screen.
+    And I absolutely don't want to make anyone type anything into discord; that's a usability
+    disaster on mobile, and you can't edit things, and if you fuck it up, etc., etc.
+  - So, here's a new idea: when you type !schedule, you get a link to a static page, which
+    works somewhat like Doodle. You pick your start and end date, and you pick out some hour blocks.
+    Then the page generates some JSON you can throw back at the robot.
+  - A later interaction would submit directly to the robot, via some sort of nonce.
 
 Maybe listing all of the current scheduled things?
  - Maybe give the bot the ability to pin active schedules?
@@ -67,6 +83,11 @@ client.on('ready', () => {
 });
 
 client.on('message', async (msg) => {
+  if (msg.content.startsWith('!hourly')) {
+    msg.author.send(`Go to website, fill out stuff, paste the garbage back in here.`);
+  }
+  // listen for a DM from a user with JSON-ified ... stuff
+
   if (msg.content.startsWith('!schedule')) {
     try {
       await scheduleSession(msg);
