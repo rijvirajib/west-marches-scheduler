@@ -44,6 +44,7 @@ TODO - formatting in bot and website should be identical. extract this to common
 
         if (options.length < 2) {
           alert('You must select at least two options.');
+          return;
         }
 
         const result = {
@@ -51,7 +52,13 @@ TODO - formatting in bot and website should be identical. extract this to common
           options,
         };
 
-        console.log(result);
+        const robotGibberish = document.getElementById('robotGibberish');
+        robotGibberish.value = JSON.stringify(result);
+      };
+
+      const copyJson = () => {
+        const robotGibberish = document.getElementById('robotGibberish');
+        navigator.clipboard.writeText(robotGibberish.value);
       };
 
       const selectSession = (checkbox) => {
@@ -176,11 +183,23 @@ TODO - formatting in bot and website should be identical. extract this to common
         </div>
       </div>
 
-      <div id="sessionSelector" class="row">Please select the start and end date.</div>
+      <div id="sessionSelector" class="row"></div>
 
       <div class="row">
+        <div class="col-12 input-group">
+          <div class="input-group-prepend">
+            <button class="btn btn-primary" onclick="generateJson()">Generate Robot Gibberish</button>
+          </div>
+          <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
+        </div>
+      </div>
+
+      <div class="row mt-3 mb-3">
         <div class="col-12">
-          <button class="btn btn-primary" onclick="generateJson()">Generate Robot Gibberish</button>
+          Select the start and end date, and then choose the dates/times you wish to make available for other players to
+          vote on. Then, press the "Generate Robot Gibberish" button, and once the gibberish is generated,
+          <button class="btn btn-success" onclick="copyJson()">copy the gibberish</button> and paste it back to the bot
+          in Discord
         </div>
       </div>
 
