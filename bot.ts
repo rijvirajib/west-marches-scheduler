@@ -84,19 +84,9 @@ client.login(token);
 // so that scheduler.html can use it, too.
 
 const emojiOptions = [
-  '❤️',
-  '🧡',
-  '💛',
-  '💚',
-  '💙',
-  '💜',
-  '🖤',
   '🅰️',
   '🅱️',
-  '🆎',
   '🆑',
-  '🅾️',
-  '🆘',
   '0️⃣',
   '1️⃣',
   '2️⃣',
@@ -114,30 +104,6 @@ const emojiOptions = [
   '🔤',
   '🔡',
   '🔠',
-  '🔴',
-  '🔵',
-  '⚫️',
-  '🔺',
-  '🔻',
-  '🔶',
-  '🔷',
-  '♠️',
-  '♣️',
-  '♥️',
-  '♦️',
-  '⛎',
-  '♈️',
-  '♉️',
-  '♊️',
-  '♋️',
-  '♌️',
-  '♍️',
-  '♎️',
-  '♏️',
-  '♐️',
-  '♑️',
-  '♒️',
-  '♓️',
 ];
 
 const emojiRefresh = '🔄';
@@ -155,6 +121,11 @@ client.on('ready', () => {
 });
 
 client.on('message', async (msg) => {
+  if (msg.content.startsWith('test')) {
+    console.log(client.emojis.resolveIdentifier('♍️'));
+    msg.react(client.emojis.resolveIdentifier('♍️'));
+  }
+
   if (msg.content.startsWith(`<@!${client.user.id}>`) || msg.content.startsWith(`<@${client.user.id}>`)) {
     await generateScheduleEmbed(msg);
   }
@@ -171,7 +142,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
     console.error('Unable to execute updateSchedulingMessage', {
       event: 'messageReactionAdd',
       message: reaction.message.id,
-      reaction: reaction.emoji.id,
+      reaction: reaction,
       user: user.id,
     });
   }
@@ -184,7 +155,7 @@ client.on('messageReactionRemove', async (reaction, user) => {
     console.error('Unable to execute updateSchedulingMessage', {
       event: 'messageReactionRemove',
       message: reaction.message.id,
-      reaction: reaction.emoji.id,
+      reaction: reaction,
       user: user.id,
     });
   }
@@ -257,14 +228,16 @@ const generateScheduleEmbed = async (msg: Message) => {
   if (!options) {
     console.log('No options were given in scheduling data', { schedulingData });
     msg.channel.send('No options were present in the data!');
+    return;
   }
 
   if (options.length > emojiOptions.length) {
     console.log('More options than emoji options');
-    msg.channel.send('Well, this is embarassing. There are more options than I have emojis for.');
+    msg.channel.send(
+      `Well, this is embarassing. Discord only supports up to 20 emoji reactions per message, and this has ${options.length}`
+    );
+    return;
   }
-
-  const emojiSubset = shuffledCopy(emojiOptions).slice(0, options.length);
 
   const embedDescription = requiredPlayers.length
     ? `_Required player${requiredPlayers.length === 1 ? '' : 's'} for this session: ${requiredPlayers.join(', ')}_`
@@ -277,22 +250,6 @@ const generateScheduleEmbed = async (msg: Message) => {
     .setTitle(embedTitle)
     .setDescription(embedDescription);
 
-  // if (
-  //   msg.author.id === client.user.id &&
-  //   msg.embeds &&
-  //   msg.embeds.length &&
-  //   msg.embeds[0].footer &&
-  //   msg.embeds[0].footer.text === embedFooter
-  // ) {
-  //   // This is our own scheduling message; let's pre-populate all the emojis.
-  //   for (let emojiOption of emojiOptions) {
-  //     msg.react(emojiOption);
-  //   }
-
-  //   // Add refresh emoji
-  //   msg.react(emojiRefresh);
-  // }
-
   for (const optionIndex in options) {
     const option = moment(options[optionIndex]);
     if (multipleSessions) {
@@ -300,18 +257,22 @@ const generateScheduleEmbed = async (msg: Message) => {
       const startTime = option.format('h A');
       const endTime = option.clone().add(sessionLength, 'hours').format('h A');
 
-      schedulingEmbed.addField(`${emojiSubset[optionIndex]} ${dateLabel} ${startTime}-${endTime}`, zeroWidthSpace);
+      schedulingEmbed.addField(`${emojiOptions[optionIndex]} ${dateLabel} ${startTime}-${endTime}`, zeroWidthSpace);
     } else {
       const dateLabel = option.format('dddd, MMMM Do YYYY');
-      schedulingEmbed.addField(`${emojiSubset[optionIndex]} ${dateLabel}`, zeroWidthSpace);
+      schedulingEmbed.addField(`${emojiOptions[optionIndex]} ${dateLabel}`, zeroWidthSpace);
     }
   }
 
   schedulingEmbed.addField(`${emojiCalendar} Current best dates`, 'none');
 
   const sentMessage = await msg.channel.send(schedulingEmbed);
-  for (const emoji of emojiSubset) {
-    sentMessage.react(emoji);
+  for (const emoji of emojiOptions) {
+    try {
+      await sentMessage.react(client.emojis.resolveIdentifier(emoji));
+    } catch (err) {
+      console.error(`Unable to react to scheduling message with emoji ${emoji}`, err.message);
+    }
   }
 };
 

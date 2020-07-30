@@ -18,6 +18,10 @@ TODO - formatting in bot and website should be identical. extract this to common
       .timeSelectors label {
         display: block;
       }
+
+      textarea {
+        height: 15em !important;
+      }
     </style>
     <script src="moment.min.js"></script>
     <script>
@@ -217,17 +221,6 @@ TODO - formatting in bot and website should be identical. extract this to common
         </div>
       </div>
 
-      <div id="sessionSelector" class="row"></div>
-
-      <div class="row">
-        <div class="col-12 input-group">
-          <div class="input-group-prepend">
-            <button class="btn btn-primary" onclick="generateGibberish()">Generate Robot Gibberish</button>
-          </div>
-          <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
-        </div>
-      </div>
-
       <div class="row mt-3 mb-3">
         <div class="col-12">
           Select the start and end date, and then choose the dates/times you wish to make available for other players to
@@ -255,6 +248,17 @@ TODO - formatting in bot and website should be identical. extract this to common
             copy the gibberish
           </button>
           and paste it back to the bot in Discord, tagging it with <code>@West Marches scheduler</code>
+        </div>
+      </div>
+
+      <div id="sessionSelector" class="row"></div>
+
+      <div class="row">
+        <div class="col-12 input-group">
+          <div class="input-group-prepend">
+            <button class="btn btn-primary" onclick="generateGibberish()">Generate Robot Gibberish</button>
+          </div>
+          <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
         </div>
       </div>
 
