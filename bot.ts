@@ -28,8 +28,8 @@ A way to schedule hourly blocks.
     [x] 3) Link generates a Discord post calling for votes
       - for now, this is a base64-encoded string to paste back into the channel
     [x] 4) Players vote on their available dates via emoji
-    [ ] 5) After 2-3 days, DM uses special emoji to close vote, and choose the date.
-    [ ] 6) The bot pings everyone who is attending on that date to inform them.
+    [x] 5) After 2-3 days, DM uses special emoji to close vote, and choose the date.
+    [x] 6) The bot pings everyone who is attending on that date to inform them.
   - todo - run webserver alongside static page and bot, and automatically send the schedule block without
     needing to copy-and-paste robot gibberish.
 
@@ -54,6 +54,7 @@ check if a member is an admin:
 
 config();
 
+const MAX_OPTIONS = 17;
 const DM_ROLE_NAMES = ['DMs'];
 const ADVENTURER_ROLE_NAMES = ['Adventurers'];
 const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
@@ -104,8 +105,8 @@ const emojiOptions = [
   '⏺',
 ];
 
-const emojiRefresh = '🔄';
 const emojiCalendar = '📅';
+const emojiLock = '🔒';
 const emojiMedals = ['🥇', '🥈', '🥉'];
 const zeroWidthSpace = `\u200B`;
 const embedDescription = (dmUserId) =>
@@ -113,7 +114,8 @@ const embedDescription = (dmUserId) =>
     ', '
   )}) to close the poll and select the final date.`;
 const embedFooter = `React with the associated emojis to indicate your availability for those dates.
-React with ${emojiRefresh} to refresh the list.`;
+The medal emojis are for the DM's use only.`;
+const embedClosedFooter = `The date has been chosen`;
 
 const startsWithEmojiOption = (str: String): boolean => {
   return emojiOptions.some((emojiOption) => str.startsWith(emojiOption));
@@ -142,28 +144,35 @@ client.on('message', async (msg) => {
   }
 });
 
+enum ReactionActions {
+  ADD = 'ADD',
+  REMOVE = 'REMOVE',
+}
+
 client.on('messageReactionAdd', async (reaction, user) => {
   try {
-    await updateSchedulingMessage(reaction, user);
+    await updateSchedulingMessage(reaction, user, ReactionActions.ADD);
   } catch (err) {
     console.error('Unable to execute updateSchedulingMessage', {
       event: 'messageReactionAdd',
       message: reaction.message.id,
       reaction: reaction,
       user: user.id,
+      error: err,
     });
   }
 });
 
 client.on('messageReactionRemove', async (reaction, user) => {
   try {
-    await updateSchedulingMessage(reaction, user);
+    await updateSchedulingMessage(reaction, user, ReactionActions.REMOVE);
   } catch (err) {
     console.error('Unable to execute updateSchedulingMessage', {
       event: 'messageReactionRemove',
       message: reaction.message.id,
       reaction: reaction,
       user: user.id,
+      error: err,
     });
   }
 });
@@ -250,10 +259,10 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
     return;
   }
 
-  if (options.length > emojiOptions.length) {
+  if (options.length > MAX_OPTIONS) {
     console.log('More options than emoji options');
     msg.channel.send(
-      `Well, this is embarassing. Discord only supports up to 20 emoji reactions per message, and this has ${options.length}`
+      `Only up to ${MAX_OPTIONS} schedule slots are supported, and you seem to be submitting ${options.length}`
     );
     return;
   }
@@ -284,7 +293,7 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
 
   const sentMessage = await msg.channel.send(schedulingEmbed);
 
-  for (var emoji of [...emojiOptions.slice(0, options.length), emojiRefresh]) {
+  for (var emoji of [...emojiOptions.slice(0, options.length), ...emojiMedals]) {
     try {
       await sentMessage.react(client.emojis.resolveIdentifier(emoji));
     } catch (err) {
@@ -293,7 +302,11 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
   }
 };
 
-const updateSchedulingMessage = async (reaction: MessageReaction, user: User | PartialUser) => {
+const updateSchedulingMessage = async (
+  reaction: MessageReaction,
+  user: User | PartialUser,
+  reactionAction: ReactionActions
+) => {
   if (reaction.partial) {
     try {
       await reaction.fetch();
@@ -304,19 +317,49 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
   }
 
   if (user.id === client.user.id) {
-    console.log('Bot reaction detected.');
     return; // This is the bot pre-filling reactions, ignore.
   }
   if (reaction.message.author.id !== client.user.id) {
-    console.log(`Reaction was to another user's message`);
     return; // This is a reaction to someone else's message
   }
   if (!reaction.message.embeds || !reaction.message.embeds.length) {
-    console.log(`Message has no embeds.`);
     return; // This is somehow not a scheduling message
   }
 
   const embed = reaction.message.embeds[0];
+  const requiredPlayers = embed.description.match(/<@!?\d+>/g) || [];
+  const requiredPlayerIds = requiredPlayers.map((requiredPlayerMention) =>
+    requiredPlayerMention.replace(/<@!?(\d+)>/, '$1')
+  );
+  const calendarField = embed.fields.find((field) => field.name.startsWith(emojiCalendar));
+
+  // Is voting closed for this schedule?
+  if (embed.title.startsWith(emojiLock)) {
+    return;
+  }
+
+  // If this is the original DM who scheduled this, and they're reacting with one of the `emojiMedals`, that means they're
+  // making their selection.
+  if (
+    reactionAction === ReactionActions.ADD &&
+    requiredPlayerIds.includes(`${user.id}`) &&
+    emojiMedals.includes(reaction.emoji.name)
+  ) {
+    // TODO wait, what if there's only one "good" date, and they chose medal-three?
+    const chosenDateLine = calendarField.value.split('\n').find((line) => line.startsWith(reaction.emoji.name));
+
+    const originalTitle = embed.title;
+    embed.setTitle(`${emojiLock} ${originalTitle}`);
+    embed.setDescription(chosenDateLine);
+    embed.setFooter(embedClosedFooter);
+    await reaction.message.edit(embed);
+
+    await reaction.message.channel.send(
+      `A date has been chosen for **${originalTitle}**, run by ${requiredPlayers.join(',')}: ${chosenDateLine}`
+    );
+
+    return;
+  }
 
   // My brain is fucking mush, there must be a better way to asynchronously iterate through a Map
   // TODO - do these even run asynchronously? Based on the console.logs, they sure don't
@@ -352,7 +395,6 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
   );
 
   // Calculate best current dates
-  const requiredPlayers = embed.description.match(/<@!?\d+>/g) || [];
   const playableDates: IPlayableDate[] = [];
   for (let i = 0; i < embed.fields.length; i++) {
     if (startsWithEmojiOption(embed.fields[i].name)) {
@@ -406,7 +448,6 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
     .join('\n');
 
   // backwards compatibility - old schedulers may not have a calendar field pre-set.
-  const calendarField = embed.fields.find((field) => field.name.startsWith(emojiCalendar));
   if (calendarField) {
     calendarField.name = calendarFieldName;
     calendarField.value = calendarFieldValue;
