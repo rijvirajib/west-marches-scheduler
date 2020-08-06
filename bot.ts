@@ -81,9 +81,6 @@ if (!token) {
 const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
 client.login(token);
 
-// TODO - there's a limit to how many reasonably readable emoji reactions we can shove onto a message.
-// We need to limit the number of choices; that probably means extracting `emojiOptions` into its own thing
-// so that scheduler.html can use it, too.
 const emojiOptions = [
   '0️⃣',
   '1️⃣',
@@ -338,16 +335,26 @@ const updateSchedulingMessage = async (
     return;
   }
 
-  // If this is the original DM who scheduled this, and they're reacting with one of the `emojiMedals`, that means they're
-  // making their selection.
+  // If this is the original DM who scheduled this, and they're reacting with
+  // one of the `emojiMedals`, that means they're making their selection.
   if (
     reactionAction === ReactionActions.ADD &&
     requiredPlayerIds.includes(`${user.id}`) &&
     emojiMedals.includes(reaction.emoji.name)
   ) {
-    // TODO wait, what if there's only one "good" date, and they chose medal-three?
     const chosenDateLine = calendarField.value.split('\n').find((line) => line.startsWith(reaction.emoji.name));
+    // if the user chose a medal vote that doesn't have any available players -
+    // e.g., if one player reacted with one date, and the DM chose the third medal -
+    // tell them they can't do that.
+    if (!chosenDateLine) {
+      await reaction.message.channel.send(
+        `<@!${user.id}> - ${reaction.emoji.name} is not a valid selection for this adventure.`
+      );
+      return;
+    }
 
+    // Otherwise, update the scheduling embed with the chosen date, and ping
+    // all the players.
     const originalTitle = embed.title;
     embed.setTitle(`${emojiLock} ${originalTitle}`);
     embed.setDescription(chosenDateLine);
@@ -361,10 +368,6 @@ const updateSchedulingMessage = async (
     return;
   }
 
-  // My brain is fucking mush, there must be a better way to asynchronously iterate through a Map
-  // TODO - do these even run asynchronously? Based on the console.logs, they sure don't
-  // eeeeh, testing this with some toy asyncs, it seems to run these in parallel; i'd bet
-  // money that it's slow because Discord is throttling us.
   await Promise.all(
     reaction.message.reactions.cache.map(async (messageReaction, emoji) => {
       return new Promise(async (resolve) => {
