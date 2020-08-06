@@ -12,38 +12,36 @@ import {
   Permissions,
   DiscordAPIError,
   Channel,
+  Role,
 } from 'discord.js';
 import * as moment from 'moment';
+import { stringify } from 'querystring';
 
 /* TODO
 
 Create manual for this thing, linked from the scheduling message itself.
 
-A way to finalize the poll and stop reacting to it?
- - either one of the people with the DM role, or one of the required players
-   would select the winning date by reacting with the appropriate medal emoji?
-
-Ability for a DM-role player to add themselves as a required player by reacting with an Emoji
- - also, the ability for a DM-role to _remove_ a required player by reacting with a different emoji.
-
-
 A way to schedule hourly blocks.
-  - ok, the PM-the-user idea sucks. For one, we don't have good emojis mapping times-of-day.
-    Yes, we have the clocks, but those are hard to read, especially on a tiny screen.
-    And I absolutely don't want to make anyone type anything into discord; that's a usability
-    disaster on mobile, and you can't edit things, and if you fuck it up, etc., etc.
-  - So, here's a new idea: when you type !schedule, you get a link to a static page, which
-    works somewhat like Doodle. You pick your start and end date, and you pick out some hour blocks.
-    Then the page generates some JSON you can throw back at the robot.
-  - A later interaction would submit directly to the robot, via some sort of nonce.
+  - new workflow
+    [x] 1) Only DMs can create a schedule event
+    [x] 2) DM gets link, picks up to 18 date/time combinations sometime with the span of the next 7-21 days
+    [x] 3) Link generates a Discord post calling for votes
+      - for now, this is a base64-encoded string to paste back into the channel
+    [x] 4) Players vote on their available dates via emoji
+    [ ] 5) After 2-3 days, DM uses special emoji to close vote, and choose the date.
+    [ ] 6) The bot pings everyone who is attending on that date to inform them.
+  - todo - run webserver alongside static page and bot, and automatically send the schedule block without
+    needing to copy-and-paste robot gibberish.
 
 Maybe listing all of the current scheduled things?
  - Maybe give the bot the ability to pin active schedules?
  - Twice a day, ping the channel about responding
 
-Show how many players chose each thing.
+TODO: don't need required players anymore, rip that out.
 
- Oh my god, I can add CUSTOM EMOJIs to represent the days-of-the-month!
+Feat request from Cameron:
+ - Something I have thought of, if workable and if others agree it is a good idea.  An option the DM can trigger indicating size of session. For example, if Scott chooses "4" no more than 4 people can vote for a date. So you don't have 8 people vote for a date, It wins, and then you have to kick half of them out anyways.
+
 */
 
 /* USEFUL STUFF
@@ -56,20 +54,23 @@ check if a member is an admin:
 
 config();
 
+const DM_ROLE_NAMES = ['DMs'];
+const ADVENTURER_ROLE_NAMES = ['Adventurers'];
+const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
+
+const SCHEDULER_URL =
+  process.env.BOT_ENV === 'prod'
+    ? 'https://pavellishin.github.io/west-marches-scheduler/docs/scheduler.html'
+    : 'file:///Users/plishin/projects/thraxabar-scheduler/docs/scheduler.html';
+
 const intersection = (arrayA: any[], arrayB: any[]): any[] => {
   return arrayA.filter((x) => arrayB.includes(x));
 };
 
-const shuffledCopy = (input: any[]): any[] => {
-  const array = [...input]; // copy array
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * i);
-    const temp = array[i];
-    array[i] = array[j];
-    array[j] = temp;
-  }
-  return array;
-};
+interface IPlayableDate {
+  date: String;
+  players: String[];
+}
 
 const token = process.env.BOT_ENV === 'prod' ? process.env.DISCORD_TOKEN_PROD : process.env.DISCORD_TOKEN_DEV;
 if (!token) {
@@ -82,11 +83,7 @@ client.login(token);
 // TODO - there's a limit to how many reasonably readable emoji reactions we can shove onto a message.
 // We need to limit the number of choices; that probably means extracting `emojiOptions` into its own thing
 // so that scheduler.html can use it, too.
-
 const emojiOptions = [
-  '🅰️',
-  '🅱️',
-  '🆑',
   '0️⃣',
   '1️⃣',
   '2️⃣',
@@ -98,19 +95,25 @@ const emojiOptions = [
   '8️⃣',
   '9️⃣',
   '🔟',
-  '🔢',
   '#️⃣',
   '*️⃣',
-  '🔤',
-  '🔡',
+  'ℹ️',
+  '🔢',
   '🔠',
+  '⏹',
+  '⏺',
 ];
 
 const emojiRefresh = '🔄';
 const emojiCalendar = '📅';
 const emojiMedals = ['🥇', '🥈', '🥉'];
 const zeroWidthSpace = `\u200B`;
-const embedFooter = `React with the associated emojis to indicate your availability for those dates.\nReact with ${emojiRefresh} to refresh the list.`;
+const embedDescription = (dmUserId) =>
+  `<@${dmUserId}>: React with one of the medals (${emojiMedals.join(
+    ', '
+  )}) to close the poll and select the final date.`;
+const embedFooter = `React with the associated emojis to indicate your availability for those dates.
+React with ${emojiRefresh} to refresh the list.`;
 
 const startsWithEmojiOption = (str: String): boolean => {
   return emojiOptions.some((emojiOption) => str.startsWith(emojiOption));
@@ -127,11 +130,15 @@ client.on('message', async (msg) => {
   }
 
   if (msg.content.startsWith(`<@!${client.user.id}>`) || msg.content.startsWith(`<@${client.user.id}>`)) {
-    await generateScheduleEmbed(msg);
+    await generateAndSendScheduleEmbed(msg);
   }
 
   if (msg.content.startsWith('!schedule')) {
-    await generateScheduleLink(msg);
+    if (await canGenerateScheduleLink(msg)) {
+      await generateAndSendScheduleLink(msg);
+    } else {
+      msg.channel.send(`I'm sorry, but you're not authorized to schedule events.`);
+    }
   }
 });
 
@@ -161,9 +168,20 @@ client.on('messageReactionRemove', async (reaction, user) => {
   }
 });
 
-const generateScheduleLink = async (msg: Message) => {
+const canGenerateScheduleLink = async (msg: Message) => {
+  // is the author a DM?
+  const isAuthorDM = msg.member.roles.cache.some((role: Role) => {
+    return DM_ROLE_NAMES.includes(role.name);
+  });
+  const isAuthorFancybone = msg.member.id === FANCYBONE_USER_ID;
+
+  return isAuthorDM || isAuthorFancybone;
+};
+
+const generateAndSendScheduleLink = async (msg: Message) => {
+  // The default schedule includes a full week, one week out from today
   const startDate = moment().add(1, 'week').format('YYYY-MM-DD');
-  const endDate = moment().add(3, 'weeks').format('YYYY-MM-DD');
+  const endDate = moment().add(2, 'weeks').format('YYYY-MM-DD');
   const guildId = msg.guild.id;
   const channelId = msg.channel.id;
   const memberId = msg.author.id;
@@ -185,7 +203,7 @@ const generateScheduleLink = async (msg: Message) => {
 
   const encodedData = Buffer.from(JSON.stringify(linkData)).toString('base64');
 
-  const link = `https://pavellishin.github.io/west-marches-scheduler/docs/scheduler.html?data=${encodedData}`;
+  const link = `${SCHEDULER_URL}?data=${encodedData}`;
 
   try {
     await msg.channel.send(
@@ -196,7 +214,7 @@ const generateScheduleLink = async (msg: Message) => {
   }
 };
 
-const generateScheduleEmbed = async (msg: Message) => {
+const generateAndSendScheduleEmbed = async (msg: Message) => {
   // Remove the @mention, and any possible newlines, in case the copy-and-paste is wonky.
   const robotGibberish = msg.content.replace(new RegExp(`<@!?${client.user.id}> ?`), '').replace('\n', '');
   let jsonString;
@@ -224,6 +242,7 @@ const generateScheduleEmbed = async (msg: Message) => {
   const options = schedulingData.options;
   const multipleSessions = schedulingData.multipleSessions;
   const sessionLength = schedulingData.sessionLength || 4; // defaults to four hours
+  const memberId = schedulingData.memberId;
 
   if (!options) {
     console.log('No options were given in scheduling data', { schedulingData });
@@ -239,25 +258,22 @@ const generateScheduleEmbed = async (msg: Message) => {
     return;
   }
 
-  const embedDescription = requiredPlayers.length
-    ? `_Required player${requiredPlayers.length === 1 ? '' : 's'} for this session: ${requiredPlayers.join(', ')}_`
-    : zeroWidthSpace;
   const embedTitle = sessionTitle || `An Untitled Adventure`;
 
   const schedulingEmbed = new MessageEmbed()
     .setColor('#0099ff') // left-most bar
     .setFooter(embedFooter)
     .setTitle(embedTitle)
-    .setDescription(embedDescription);
+    .setDescription(embedDescription(memberId));
 
   for (const optionIndex in options) {
     const option = moment(options[optionIndex]);
     if (multipleSessions) {
       const dateLabel = option.format('dddd, MMMM Do YYYY');
-      const startTime = option.format('h A');
-      const endTime = option.clone().add(sessionLength, 'hours').format('h A');
+      const startTime = option.format('h a');
+      const endTime = option.clone().add(sessionLength, 'hours').format('h a');
 
-      schedulingEmbed.addField(`${emojiOptions[optionIndex]} ${dateLabel} ${startTime}-${endTime}`, zeroWidthSpace);
+      schedulingEmbed.addField(`${emojiOptions[optionIndex]} ${dateLabel}, ${startTime} - ${endTime}`, zeroWidthSpace);
     } else {
       const dateLabel = option.format('dddd, MMMM Do YYYY');
       schedulingEmbed.addField(`${emojiOptions[optionIndex]} ${dateLabel}`, zeroWidthSpace);
@@ -267,7 +283,8 @@ const generateScheduleEmbed = async (msg: Message) => {
   schedulingEmbed.addField(`${emojiCalendar} Current best dates`, 'none');
 
   const sentMessage = await msg.channel.send(schedulingEmbed);
-  for (const emoji of emojiOptions) {
+
+  for (var emoji of [...emojiOptions.slice(0, options.length), emojiRefresh]) {
     try {
       await sentMessage.react(client.emojis.resolveIdentifier(emoji));
     } catch (err) {
@@ -336,7 +353,7 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
 
   // Calculate best current dates
   const requiredPlayers = embed.description.match(/<@!?\d+>/g) || [];
-  const playableDates = [];
+  const playableDates: IPlayableDate[] = [];
   for (let i = 0; i < embed.fields.length; i++) {
     if (startsWithEmojiOption(embed.fields[i].name)) {
       const players = embed.fields[i].value
@@ -373,13 +390,11 @@ const updateSchedulingMessage = async (reaction: MessageReaction, user: User | P
   const calendarFieldValue = playableDates
     .slice(0, 5) // trim to top three options
     .map(({ date: date, players: players }) => {
-      // convert object into nice human-readable thing
-      return `${date}: ${players.join(', ')}`;
-    })
-    .map((value) => {
       // strip out the voting emoji... which turns out to actually be rather annoying.
       // `emojiOptions` apparently each take up three bytes.
-      return value.substring(3);
+      const justTheDate = date.substring(3);
+      // convert object into nice human-readable thing
+      return `**${players.length}** 👥 ${justTheDate}: ${players.join(', ')}`;
     })
     .map((value, index) => {
       // add nice medals

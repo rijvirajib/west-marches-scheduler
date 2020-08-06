@@ -27,7 +27,7 @@ TODO - formatting in bot and website should be identical. extract this to common
       }
 
       textarea {
-        height: 15em !important;
+        height: 100%;
       }
     </style>
     <script src="moment.min.js"></script>
@@ -67,9 +67,10 @@ TODO - formatting in bot and website should be identical. extract this to common
         const multipleSessions = document.getElementById('multipleSessions').checked;
         const sessionLength = parseInt(document.getElementById('sessionLength').value, 10);
         const options = Object.keys(multipleSessions ? chosenTimes : chosenDates);
+        const robotGibberish = document.getElementById('robotGibberish');
 
         if (options.length < 2) {
-          alert('You must select at least two options.');
+          robotGibberish.value = 'At least two dates must be selected.';
           return;
         }
 
@@ -84,7 +85,6 @@ TODO - formatting in bot and website should be identical. extract this to common
           sessionTitle,
         };
 
-        const robotGibberish = document.getElementById('robotGibberish');
         robotGibberish.value = btoa(JSON.stringify(result));
       };
 
@@ -118,6 +118,7 @@ TODO - formatting in bot and website should be identical. extract this to common
         }
 
         updateChosenCount();
+        generateGibberish();
       };
 
       const updateChosenCount = () => {
@@ -213,6 +214,7 @@ TODO - formatting in bot and website should be identical. extract this to common
         }
 
         updateChosenCount();
+        generateGibberish();
       };
     </script>
   </head>
@@ -270,12 +272,10 @@ TODO - formatting in bot and website should be identical. extract this to common
       </div>
 
       <div class="row mt-3 mb-3">
-        <div class="col-lg-10">
+        <div class="col-lg-5">
           <div class="alert alert-info">
             Select the start and end date, and then choose the dates/times you wish to make available for other players
-            to vote on. Then, press the
-            <button class="btn btn-primary btn-sm" onclick="generateGibberish()">Generate Robot Gibberish</button>
-            button, and once the gibberish is generated,
+            to vote on. Then,
             <button class="btn btn-success btn-sm" onclick="copyGibberish()">
               <svg
                 width="1em"
@@ -296,8 +296,16 @@ TODO - formatting in bot and website should be identical. extract this to common
               </svg>
               copy the gibberish
             </button>
-            and paste it back to the bot in Discord, tagging it with <code>@West Marches scheduler</code>
+            and paste it back to the bot in Discord, tagging it with <code>@West Marches scheduler</code
+            ><!-- TODO extract the actual @tag -->
           </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div class="alert alert-warning">
+            Robot gibberish:
+          </div>
+          <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
         </div>
 
         <div class="col-lg-2">
@@ -309,15 +317,6 @@ TODO - formatting in bot and website should be identical. extract this to common
       </div>
 
       <div class="row" id="sessionSelector"></div>
-
-      <div class="row">
-        <div class="col-12 input-group">
-          <div class="input-group-prepend">
-            <button class="btn btn-primary" onclick="generateGibberish()">Generate Robot Gibberish</button>
-          </div>
-          <textarea id="robotGibberish" class="form-control" placeholder="Robot gibberish will go here"></textarea>
-        </div>
-      </div>
 
       <div class="d-none">
         <div class="dateSelector col-12">
