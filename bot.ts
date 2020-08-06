@@ -19,6 +19,8 @@ import { stringify } from 'querystring';
 
 /* TODO
 
+The roles are VERY weirdly handled, messing with auto-completion
+
 Console output should include timestamps
 
 Create manual for this thing, linked from the scheduling message itself.
@@ -34,6 +36,10 @@ A way to schedule hourly blocks.
     [x] 6) The bot pings everyone who is attending on that date to inform them.
   - todo - run webserver alongside static page and bot, and automatically send the schedule block without
     needing to copy-and-paste robot gibberish.
+
+Only a DM should be able to trigger !schedule, or to have the bot pick up their robot gibberish.
+ - in fact, make sure that the "required player IDs" matches the person who's gibbering
+ - and it should PM the DM the link, to avoid people clicking it in channel
 
 Maybe listing all of the current scheduled things?
  - Maybe give the bot the ability to pin active schedules?
@@ -243,8 +249,6 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
     return;
   }
 
-  console.log(schedulingData);
-
   const requiredPlayers = schedulingData.requiredPlayers || [];
   const sessionTitle = schedulingData.sessionTitle;
   const options = schedulingData.options;
@@ -390,7 +394,7 @@ const updateSchedulingMessage = async (
 
         for (let i = 0; i < embed.fields.length; i++) {
           if (embed.fields[i].name.includes(emoji)) {
-            embed.fields[i].value = userMentions.join(', ');
+            embed.fields[i].value = userMentions.length ? userMentions.join(', ') : zeroWidthSpace;
           }
         }
 
@@ -419,6 +423,7 @@ const updateSchedulingMessage = async (
       }
     }
   }
+
   playableDates.sort((playableDateA, playableDateB) => {
     // If one date includes a required player, but the other does not, consider it to be weighted higher.
     const requiredPlayersA = intersection(playableDateA.players, requiredPlayers);
@@ -455,9 +460,9 @@ const updateSchedulingMessage = async (
   // backwards compatibility - old schedulers may not have a calendar field pre-set.
   if (calendarField) {
     calendarField.name = calendarFieldName;
-    calendarField.value = calendarFieldValue;
+    calendarField.value = calendarFieldValue || 'none';
   } else {
-    embed.addField(calendarFieldName, calendarFieldValue);
+    embed.addField(calendarFieldName, calendarFieldValue || 'none');
   }
 
   reaction.message.edit(embed);
