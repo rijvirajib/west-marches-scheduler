@@ -19,6 +19,8 @@ import { stringify } from 'querystring';
 
 /* TODO
 
+Console output should include timestamps
+
 Create manual for this thing, linked from the scheduling message itself.
 
 A way to schedule hourly blocks.
@@ -62,7 +64,7 @@ const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
 const SCHEDULER_URL =
   process.env.BOT_ENV === 'prod'
     ? 'https://pavellishin.github.io/west-marches-scheduler/docs/scheduler.html'
-    : 'file:///Users/plishin/projects/thraxabar-scheduler/docs/scheduler.html';
+    : 'http://lishin.org/docs/scheduler.html';
 
 const intersection = (arrayA: any[], arrayB: any[]): any[] => {
   return arrayA.filter((x) => arrayB.includes(x));
