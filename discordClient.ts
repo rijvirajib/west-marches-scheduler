@@ -86,8 +86,11 @@ if (!token) {
   throw new Error('No token was defined. Check the env variables: BOT_ENV, DISCORD_TOKEN_PROD, DISCORD_TOKEN_DEV');
 }
 
-const client = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
-client.login(token);
+export const discordClient = new Client({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
+
+export const login = async () => {
+  await discordClient.login(token);
+};
 
 const emojiOptions = [
   '0️⃣',
@@ -126,17 +129,17 @@ const startsWithEmojiOption = (str: String): boolean => {
   return emojiOptions.some((emojiOption) => str.startsWith(emojiOption));
 };
 
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+discordClient.on('ready', () => {
+  console.log(`Logged in as ${discordClient.user.tag}!`);
 });
 
-client.on('message', async (msg) => {
+discordClient.on('message', async (msg) => {
   if (msg.content.startsWith('test')) {
-    console.log(client.emojis.resolveIdentifier('♍️'));
-    msg.react(client.emojis.resolveIdentifier('♍️'));
+    console.log(discordClient.emojis.resolveIdentifier('♍️'));
+    msg.react(discordClient.emojis.resolveIdentifier('♍️'));
   }
 
-  if (msg.content.startsWith(`<@!${client.user.id}>`) || msg.content.startsWith(`<@${client.user.id}>`)) {
+  if (msg.content.startsWith(`<@!${discordClient.user.id}>`) || msg.content.startsWith(`<@${discordClient.user.id}>`)) {
     await generateAndSendScheduleEmbed(msg);
   }
 
@@ -154,7 +157,7 @@ enum ReactionActions {
   REMOVE = 'REMOVE',
 }
 
-client.on('messageReactionAdd', async (reaction, user) => {
+discordClient.on('messageReactionAdd', async (reaction, user) => {
   try {
     await updateSchedulingMessage(reaction, user, ReactionActions.ADD);
   } catch (err) {
@@ -168,7 +171,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
   }
 });
 
-client.on('messageReactionRemove', async (reaction, user) => {
+discordClient.on('messageReactionRemove', async (reaction, user) => {
   try {
     await updateSchedulingMessage(reaction, user, ReactionActions.REMOVE);
   } catch (err) {
@@ -230,7 +233,7 @@ const generateAndSendScheduleLink = async (msg: Message) => {
 
 const generateAndSendScheduleEmbed = async (msg: Message) => {
   // Remove the @mention, and any possible newlines, in case the copy-and-paste is wonky.
-  const robotGibberish = msg.content.replace(new RegExp(`<@!?${client.user.id}> ?`), '').replace('\n', '');
+  const robotGibberish = msg.content.replace(new RegExp(`<@!?${discordClient.user.id}> ?`), '').replace('\n', '');
   let jsonString;
   let schedulingData;
 
@@ -298,7 +301,7 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
 
   for (var emoji of [...emojiOptions.slice(0, options.length), ...emojiMedals]) {
     try {
-      await sentMessage.react(client.emojis.resolveIdentifier(emoji));
+      await sentMessage.react(discordClient.emojis.resolveIdentifier(emoji));
     } catch (err) {
       console.error(`Unable to react to scheduling message with emoji ${emoji}`, err.message);
     }
@@ -319,10 +322,10 @@ const updateSchedulingMessage = async (
     }
   }
 
-  if (user.id === client.user.id) {
+  if (user.id === discordClient.user.id) {
     return; // This is the bot pre-filling reactions, ignore.
   }
-  if (reaction.message.author.id !== client.user.id) {
+  if (reaction.message.author.id !== discordClient.user.id) {
     return; // This is a reaction to someone else's message
   }
   if (!reaction.message.embeds || !reaction.message.embeds.length) {
@@ -384,7 +387,7 @@ const updateSchedulingMessage = async (
         }
 
         const userMentions = messageReaction.users.cache
-          .filter((user) => user.id != client.user.id)
+          .filter((user) => user.id != discordClient.user.id)
           .sort()
           .map((user) => `<@${user.id}>`);
 
