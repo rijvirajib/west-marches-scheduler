@@ -2,21 +2,16 @@
 import { config } from 'dotenv';
 import {
   Client,
-  DMChannel,
   MessageEmbed,
   Message,
   MessageReaction,
   User,
   PartialUser,
   EmbedField,
-  Permissions,
-  DiscordAPIError,
-  Channel,
   Role,
   TextChannel,
 } from 'discord.js';
 import * as moment from 'moment';
-import { stringify } from 'querystring';
 
 /* TODO
 
@@ -37,10 +32,6 @@ A way to schedule hourly blocks.
     [x] 6) The bot pings everyone who is attending on that date to inform them.
   - todo - run webserver alongside static page and bot, and automatically send the schedule block without
     needing to copy-and-paste robot gibberish.
-
-Only a DM should be able to trigger !schedule, or to have the bot pick up their robot gibberish.
- - in fact, make sure that the "required player IDs" matches the person who's gibbering
- - and it should PM the DM the link, to avoid people clicking it in channel
 
 Maybe listing all of the current scheduled things?
  - Maybe give the bot the ability to pin active schedules?
@@ -211,6 +202,7 @@ const generateAndSendScheduleLink = async (msg: Message) => {
     guildId,
     channelId,
     memberId,
+    messageId: msg.id,
     requiredPlayerIds,
     sessionTitle,
   };
@@ -220,7 +212,7 @@ const generateAndSendScheduleLink = async (msg: Message) => {
   const link = `${SCHEDULER_URL}?data=${encodedData}`;
 
   try {
-    await msg.channel.send(`Ok, <@${memberId}> - I've PMed you a link.`);
+    await msg.channel.send(`Ok, <@${memberId}> - I'm sending you a link.`);
     await msg.author.send(`Please follow this link to select the options for the session *${sessionTitle}*: ${link}`);
   } catch (err) {
     console.log('Unable to post link to channel', { message: err.message, link });
@@ -233,22 +225,23 @@ interface IScheduleSubmission {
   options: string[];
   guildId: string;
   memberId: string;
+  messageId: string;
   channelId: string;
   requiredPlayerIds?: string[];
   sessionTitle?: string;
 }
 
 export const generateAndSendScheduleEmbed = async (schedulingData: IScheduleSubmission) => {
-  // TODO - this is a security issue; need to figure out some way of authenticating this.
-  // maybe a message ID, from the message sent to the DM to verify that this is
-  // something that should be posted?
-  const sessionTitle = schedulingData.sessionTitle;
-  const options = schedulingData.options;
-  const multipleSessions = schedulingData.multipleSessions;
-  const sessionLength = schedulingData.sessionLength || 4; // defaults to four hours
-  const memberId = schedulingData.memberId;
-  const guildId = schedulingData.guildId;
-  const channelId = schedulingData.channelId;
+  const {
+    sessionTitle,
+    options,
+    multipleSessions,
+    sessionLength = 4,
+    memberId,
+    messageId,
+    guildId,
+    channelId,
+  } = schedulingData;
 
   // TODO - validate inputs more.
   if (!options) {
@@ -277,6 +270,27 @@ export const generateAndSendScheduleEmbed = async (schedulingData: IScheduleSubm
     throw new Error(`Scheduling channel not found`);
   }
 
+  // Ok, let's check something - did this person ask for a schedule?
+  const originalMessage = await channel.messages.fetch(messageId);
+  if (!originalMessage) {
+    throw new Error(`Original request message ${messageId} not found.`);
+  }
+  if (originalMessage.author.id !== memberId) {
+    throw new Error(`Original request message does not match memberId ${memberId}.`);
+  }
+  // And if so, have we already sent one to the channel?
+  // When we do, we mark the original "!schedule" message with an emojiCalendar.
+  for (const messageReaction of originalMessage.reactions.cache.array()) {
+    await messageReaction.fetch();
+    if (messageReaction.emoji.name != emojiCalendar) {
+      continue;
+    }
+    await messageReaction.users.fetch();
+    if (messageReaction.users.cache.find((user) => user.id === discordClient.user.id)) {
+      throw new Error(`This schedule request has already been sent to the channel.`);
+    }
+  }
+
   const embedTitle = sessionTitle || `An Untitled Adventure`;
 
   const schedulingEmbed = new MessageEmbed()
@@ -302,6 +316,10 @@ export const generateAndSendScheduleEmbed = async (schedulingData: IScheduleSubm
   schedulingEmbed.addField(`${emojiCalendar} Current best dates`, 'none');
 
   const sentMessage = await channel.send(schedulingEmbed);
+
+  // React to the original message with the calendar emoji, so that if the user
+  // tries to use the link again, it won't work.
+  await originalMessage.react(emojiCalendar);
 
   for (var emoji of [...emojiOptions.slice(0, options.length), ...emojiMedals]) {
     try {
@@ -343,7 +361,7 @@ const updateSchedulingMessage = async (
   const requiredPlayerIds = requiredPlayers.map((requiredPlayerMention) =>
     requiredPlayerMention.replace(/<@!?(\d+)>/, '$1')
   );
-  const calendarField = embed.fields.find((field) => field.name.startsWith(emojiCalendar));
+  const calendarField: EmbedField = embed.fields.find((field) => field.name.startsWith(emojiCalendar));
 
   // Is voting closed for this schedule?
   if (embed.title.startsWith(emojiLock)) {

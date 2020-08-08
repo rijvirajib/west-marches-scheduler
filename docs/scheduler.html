@@ -36,14 +36,11 @@ TODO - formatting in bot and website should be identical. extract this to common
       const query = new URLSearchParams(window.location.search);
       const data = JSON.parse(atob(query.get('data') || '') || {});
 
-      const { startDate, endDate, guildId, memberId, channelId, sessionTitle } = data;
+      const { startDate, endDate, guildId, memberId, messageId, channelId, sessionTitle } = data;
       const requiredPlayerIds = data.requiredPlayerIds || [];
 
       window.addEventListener('load', (event) => {
         try {
-          document.getElementById('guildId').value = guildId || '';
-          document.getElementById('memberId').value = memberId || '';
-          document.getElementById('channelId').value = channelId || '';
           document.getElementById('sessionTitleText').innerText = sessionTitle || '';
 
           if (startDate) {
@@ -80,6 +77,7 @@ TODO - formatting in bot and website should be identical. extract this to common
           options,
           guildId,
           memberId,
+          messageId,
           channelId,
           requiredPlayerIds,
           sessionTitle,
@@ -97,8 +95,12 @@ TODO - formatting in bot and website should be identical. extract this to common
             body: JSON.stringify(result),
           });
           console.log(response);
+          if (!response.ok) {
+            const errorMessage = await response.text();
+            alert(`Unable to create schedule: ${errorMessage}`);
+          }
         } catch (err) {
-          console.log(`An error occurred: ${err.message}`);
+          alert(`An error occurred: ${err.message}`);
         } finally {
           submitScheduleButton.disabled = false;
         }
