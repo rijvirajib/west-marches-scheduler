@@ -13,6 +13,7 @@ import {
   DiscordAPIError,
   Channel,
   Role,
+  TextChannel,
 } from 'discord.js';
 import * as moment from 'moment';
 import { stringify } from 'querystring';
@@ -70,7 +71,7 @@ const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
 const SCHEDULER_URL =
   process.env.BOT_ENV === 'prod'
     ? 'https://pavellishin.github.io/west-marches-scheduler/docs/scheduler.html'
-    : 'http://lishin.org/docs/scheduler.html';
+    : 'http://localhost:8020/scheduler.html'; // TODO - need to pass this through with ngrok for testing
 
 const intersection = (arrayA: any[], arrayB: any[]): any[] => {
   return arrayA.filter((x) => arrayB.includes(x));
@@ -137,10 +138,6 @@ discordClient.on('message', async (msg) => {
   if (msg.content.startsWith('test')) {
     console.log(discordClient.emojis.resolveIdentifier('♍️'));
     msg.react(discordClient.emojis.resolveIdentifier('♍️'));
-  }
-
-  if (msg.content.startsWith(`<@!${discordClient.user.id}>`) || msg.content.startsWith(`<@${discordClient.user.id}>`)) {
-    await generateAndSendScheduleEmbed(msg);
   }
 
   if (msg.content.startsWith('!schedule')) {
@@ -223,54 +220,61 @@ const generateAndSendScheduleLink = async (msg: Message) => {
   const link = `${SCHEDULER_URL}?data=${encodedData}`;
 
   try {
-    await msg.channel.send(
-      `Ok, <@${memberId}> - please follow this link to select the options for the session. Once you're done, please paste the results here, tagging me first: ${link}`
-    );
+    await msg.channel.send(`Ok, <@${memberId}> - I've PMed you a link.`);
+    await msg.author.send(`Please follow this link to select the options for the session *${sessionTitle}*: ${link}`);
   } catch (err) {
     console.log('Unable to post link to channel', { message: err.message, link });
   }
 };
 
-const generateAndSendScheduleEmbed = async (msg: Message) => {
-  // Remove the @mention, and any possible newlines, in case the copy-and-paste is wonky.
-  const robotGibberish = msg.content.replace(new RegExp(`<@!?${discordClient.user.id}> ?`), '').replace('\n', '');
-  let jsonString;
-  let schedulingData;
+interface IScheduleSubmission {
+  sessionLength: number;
+  multipleSessions: boolean;
+  options: string[];
+  guildId: string;
+  memberId: string;
+  channelId: string;
+  requiredPlayerIds?: string[];
+  sessionTitle?: string;
+}
 
-  try {
-    jsonString = Buffer.from(robotGibberish, 'base64').toString();
-  } catch (err) {
-    console.log('Unable to base64-decode gibberish', { robotGibberish, errMessage: err.message });
-    msg.channel.send('Unable to parse robot gibberish! The base64-decoded data could not be parsed.');
-    return;
-  }
-  try {
-    schedulingData = JSON.parse(jsonString);
-  } catch (err) {
-    console.log('Unable to parse base64-decoded JSON', { jsonString, errMessage: err.message });
-    msg.channel.send('Unable to parse robot gibberish! The json data could not be parsed.');
-    return;
-  }
-
-  const requiredPlayers = schedulingData.requiredPlayers || [];
+export const generateAndSendScheduleEmbed = async (schedulingData: IScheduleSubmission) => {
+  // TODO - this is a security issue; need to figure out some way of authenticating this.
+  // maybe a message ID, from the message sent to the DM to verify that this is
+  // something that should be posted?
   const sessionTitle = schedulingData.sessionTitle;
   const options = schedulingData.options;
   const multipleSessions = schedulingData.multipleSessions;
   const sessionLength = schedulingData.sessionLength || 4; // defaults to four hours
   const memberId = schedulingData.memberId;
+  const guildId = schedulingData.guildId;
+  const channelId = schedulingData.channelId;
 
+  // TODO - validate inputs more.
   if (!options) {
     console.log('No options were given in scheduling data', { schedulingData });
-    msg.channel.send('No options were present in the data!');
-    return;
+    throw new Error('No options were present in the data!');
   }
 
   if (options.length > MAX_OPTIONS) {
     console.log('More options than emoji options');
-    msg.channel.send(
+    throw new Error(
       `Only up to ${MAX_OPTIONS} schedule slots are supported, and you seem to be submitting ${options.length}`
     );
-    return;
+  }
+
+  const guild = discordClient.guilds.cache.find((guild) => {
+    return guild.id === guildId;
+  });
+  if (!guild) {
+    throw new Error(`Guild not found.`);
+  }
+  const channel: TextChannel = guild.channels.cache.find((channel) => {
+    return channel.id === channelId;
+  }) as TextChannel;
+
+  if (!channel) {
+    throw new Error(`Scheduling channel not found`);
   }
 
   const embedTitle = sessionTitle || `An Untitled Adventure`;
@@ -297,7 +301,7 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
 
   schedulingEmbed.addField(`${emojiCalendar} Current best dates`, 'none');
 
-  const sentMessage = await msg.channel.send(schedulingEmbed);
+  const sentMessage = await channel.send(schedulingEmbed);
 
   for (var emoji of [...emojiOptions.slice(0, options.length), ...emojiMedals]) {
     try {
@@ -306,6 +310,8 @@ const generateAndSendScheduleEmbed = async (msg: Message) => {
       console.error(`Unable to react to scheduling message with emoji ${emoji}`, err.message);
     }
   }
+
+  return;
 };
 
 const updateSchedulingMessage = async (
