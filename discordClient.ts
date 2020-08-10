@@ -15,6 +15,10 @@ import * as moment from 'moment';
 
 /* TODO
 
+BUG: I noticed a potential issue with the date range selector. This may be a non-issue, but if I pick a date and then change the date range to not include that date, the selected date isn’t unselected.
+For example, the range is Aug 15-20. I pick three times on Aug 15. Then I realize I can’t do Aug 15 and change the date range to Aug 16-20. Those three Aug 15 times remain selected.
+
+
 The roles are VERY weirdly handled, messing with auto-completion
 
 Console output should include timestamps
@@ -61,8 +65,8 @@ const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
 
 const SCHEDULER_URL =
   process.env.BOT_ENV === 'prod'
-    ? 'https://pavellishin.github.io/west-marches-scheduler/docs/scheduler.html'
-    : 'http://localhost:8020/scheduler.html'; // TODO - need to pass this through with ngrok for testing
+    ? 'https://lishin.org/west-marches/scheduler.html'
+    : 'http://897770a72360.ngrok.io/scheduler.html'; // TODO - need to pass this through with ngrok for testing
 
 const intersection = (arrayA: any[], arrayB: any[]): any[] => {
   return arrayA.filter((x) => arrayB.includes(x));
