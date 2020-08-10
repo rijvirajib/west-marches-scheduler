@@ -1,0 +1,1 @@
+rsync -arvzh docs lishin.org:/var/domains/lishin.org/
