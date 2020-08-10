@@ -65,7 +65,7 @@ const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
 
 const SCHEDULER_URL =
   process.env.BOT_ENV === 'prod'
-    ? 'https://lishin.org/west-marches/scheduler.html'
+    ? 'https://west-marches.lishin.org/scheduler.html'
     : 'http://897770a72360.ngrok.io/scheduler.html'; // TODO - need to pass this through with ngrok for testing
 
 const intersection = (arrayA: any[], arrayB: any[]): any[] => {
