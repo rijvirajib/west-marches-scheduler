@@ -66,7 +66,7 @@ const FANCYBONE_USER_ID = 'ZZZZ' + '226540847158525953'; // I'm magic!
 const SCHEDULER_URL =
   process.env.BOT_ENV === 'prod'
     ? 'http://west-marches.lishin.org/scheduler.html'
-    : 'http://897770a72360.ngrok.io/scheduler.html'; // TODO - need to pass this through with ngrok for testing
+    : 'http://ac5ac24a3963.ngrok.io/scheduler.html'; // TODO - need to pass this through with ngrok for testing
 
 const intersection = (arrayA: any[], arrayB: any[]): any[] => {
   return arrayA.filter((x) => arrayB.includes(x));
@@ -444,11 +444,6 @@ const updateSchedulingMessage = async (
         .sort();
       const date = embed.fields[i].name;
 
-      if (requiredPlayers.length && intersection(players, requiredPlayers).length === 0) {
-        // If there _are_ required players, don't even consider dates that don't include them.
-        continue;
-      }
-
       if (players.length > 0) {
         playableDates.push({ date, players });
       }
@@ -456,19 +451,12 @@ const updateSchedulingMessage = async (
   }
 
   playableDates.sort((playableDateA, playableDateB) => {
-    // If one date includes a required player, but the other does not, consider it to be weighted higher.
-    const requiredPlayersA = intersection(playableDateA.players, requiredPlayers);
-    const requiredPlayersB = intersection(playableDateB.players, requiredPlayers);
-    if (requiredPlayersA.length !== requiredPlayersB.length) {
-      return requiredPlayersB.length - requiredPlayersA.length;
-    }
-    // otherwise, just go by player count.
+    // Sort by player count.
+    // The DM is implicitly available on all of the dates they've chosen.
     return playableDateB.players.length - playableDateA.players.length;
   });
 
-  const calendarFieldName = requiredPlayers.length
-    ? `${emojiCalendar} Current best dates with required players:`
-    : `${emojiCalendar} Current best dates`;
+  const calendarFieldName = `${emojiCalendar} Current best dates`;
 
   const calendarFieldValue = playableDates
     .slice(0, 5) // trim to top three options
